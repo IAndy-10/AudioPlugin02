@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Plugin 01</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1 class="title">AUDIO PLUGIN 01</h1>
+        </header>
+
+        <!-- Waveform Selection Section -->
+        <section class="waveform-section">
+            <label class="waveform-label">WAVEFORM</label>
+            <select id="waveformBox" class="waveform-select">
+                <option value="0">Saw</option>
+                <option value="1">Pulse</option>
+                <option value="2">Noise</option>
+                <option value="3">Karplus</option>
+            </select>
+            <button id="pluckButton" class="pluck-button">PLUCK</button>
+        </section>
+
+        <!-- Oscillator Controls Section -->
+        <section class="controls-section">
+            <div class="section-header">OSCILLATOR CONTROLS</div>
+            <div class="controls-row">
+                <div class="control-knob">
+                    <label class="knob-label">GAIN (dB)</label>
+                    <div class="knob-container">
+                        <input type="range" id="gainSlider" class="knob-slider" 
+                               min="0" max="100" value="50" step="1">
+                        <div class="knob-value" id="gainValue">50 %</div>
+                    </div>
+                </div>
+
+                <div class="control-knob">
+                    <label class="knob-label">FREQUENCY</label>
+                    <div class="knob-container">
+                        <input type="range" id="freqSlider" class="knob-slider" 
+                               min="36" max="96" value="60" step="1">
+                        <div class="knob-value" id="freqValue">60</div>
+                    </div>
+                </div>
+
+                <div class="control-knob">
+                    <label class="knob-label">FILTER</label>
+                    <div class="knob-container">
+                        <input type="range" id="virtualFilterSlider" class="knob-slider" 
+                               min="0" max="100" value="100" step="1">
+                        <div class="knob-value" id="virtualFilterValue">100 %</div>
+                    </div>
+                </div>
+
+                <div class="control-knob">
+                    <label class="knob-label">PULSE WIDTH</label>
+                    <div class="knob-container">
+                        <input type="range" id="pulseWidthSlider" class="knob-slider" 
+                               min="0" max="100" value="50" step="1">
+                        <div class="knob-value" id="pulseWidthValue">50 %</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Noise Controls Section -->
+        <section class="controls-section">
+            <div class="section-header">NOISE CONTROLS</div>
+            <div class="controls-row">
+                <div class="control-knob">
+                    <label class="knob-label">NOISE COLOR</label>
+                    <div class="knob-container">
+                        <input type="range" id="noiseColorSlider" class="knob-slider" 
+                               min="0" max="2" value="1" step="1">
+                        <div class="knob-value" id="noiseColorValue">Pink</div>
+                    </div>
+                </div>
+
+                <div class="control-knob">
+                    <label class="knob-label">NOISE FADE</label>
+                    <div class="knob-container">
+                        <input type="range" id="noiseFadeSlider" class="knob-slider" 
+                               min="0" max="1000" value="200" step="1">
+                        <div class="knob-value" id="noiseFadeValue">200 ms</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
