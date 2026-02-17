@@ -1,22 +1,12 @@
 #include "PluginProcessor.h"
+#include "ParameterLayout.h"
 #include "PluginEditor.h"
 #include "saw.h"
+#include "noise.h"
 #include <fstream>
 
 std::unique_ptr<plugin01::FMSaw> osc;
-
-static juce::AudioProcessorValueTreeState::ParameterLayout parameters() {
-  std::vector<std::unique_ptr<juce::RangedAudioParameter>> parameter_list;
-
-  parameter_list.push_back(std::make_unique<juce::AudioParameterFloat>(
-      juce::ParameterID{"gain", 1}, "Gain", -60.0f, 0.0f, -60.0f));
-
-  parameter_list.push_back(std::make_unique<juce::AudioParameterChoice>(
-      juce::ParameterID{"waveform", 1}, "Waveform", juce::StringArray{"Saw"},
-      0));
-
-  return {parameter_list.begin(), parameter_list.end()};
-}
+std::unique_ptr<plugin01::NoiseGenerator> noise;
 
 //==============================================================================
 AudioPluginAudioProcessor::AudioPluginAudioProcessor()
@@ -29,7 +19,7 @@ AudioPluginAudioProcessor::AudioPluginAudioProcessor()
               .withOutput("Output", juce::AudioChannelSet::stereo(), true)
 #endif
               ),
-      apvts(*this, nullptr, "Parameters", parameters()) {
+      apvts(*this, nullptr, "Parameters", createParameterLayout()) {
 }
 
 AudioPluginAudioProcessor::~AudioPluginAudioProcessor() {}
@@ -122,8 +112,11 @@ void AudioPluginAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   for (auto i = getTotalNumInputChannels(); i < totalNumOutputChannels; ++i)
     buffer.clear(i, 0, buffer.getNumSamples());
 
-  float gainDb = apvts.getRawParameterValue("gain")->load();
-  int waveformChoice = (int)apvts.getRawParameterValue("waveform")->load();
+  float gainDb =
+      apvts.getRawParameterValue(PluginParamIDs::gain.getParamID())->load();
+  int waveformChoice =
+      (int)apvts.getRawParameterValue(PluginParamIDs::waveform.getParamID())
+          ->load();
 
   float gainAmp = juce::Decibels::decibelsToGain(gainDb);
 
@@ -137,6 +130,8 @@ void AudioPluginAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer,
 
     if (waveformChoice == 0) {
       outSample = osc->process() * gainAmp;
+    } else if (waveformChoice == 1) {
+      outSample = noise->process() * gainAmp;
     }
 
     leftChannel[sample] = outSample;

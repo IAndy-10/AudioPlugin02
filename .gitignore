@@ -2,6 +2,8 @@
 build/
 cmake-build-*/
 Builds/
+WebUI/dist
+WebUI/node_modules
 
 # IDE files
 .vscode/

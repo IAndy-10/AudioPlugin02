@@ -67,6 +67,8 @@ target_sources(AudioPlugin02 PRIVATE
     Source/Plugin/WebviewBridge.h
     Source/DSP/saw.h
     Source/DSP/saw.cpp
+    Source/DSP/noise.h
+    Source/DSP/noise.cpp
     Source/DSP/utils.h
     Source/Parameters/ParameterIDs.h
     Source/Parameters/ParameterLayout.h
@@ -77,6 +79,40 @@ target_include_directories(AudioPlugin02 PRIVATE
     Source/DSP
     Source/Parameters
 )
+
+
+# ============================================================
+# Svelte Build
+# ============================================================
+
+add_custom_command(
+    OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/WebUI/dist/index.html"
+    COMMAND npm run build
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/WebUI"
+    COMMENT "Building Svelte frontend..."
+    VERBATIM
+)
+
+
+# ============================================================
+# Embed Web Resources Into Binary
+# ============================================================
+
+# 1. Force a clean of the dist folder to prevent stale assets
+add_custom_command(
+    TARGET AudioPlugin02 PRE_BUILD
+    COMMAND ${CMAKE_COMMAND} -E remove_directory "${CMAKE_CURRENT_SOURCE_DIR}/WebUI/dist"
+    COMMENT "Clearing old UI distribution files..."
+)
+
+# 2. Run the actual Svelte build
+add_custom_command(
+    TARGET AudioPlugin02 PRE_BUILD
+    COMMAND npm run build
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/WebUI"
+    COMMENT "Building fresh Svelte frontend..."
+)
+
 
 
 # ============================================================
@@ -160,14 +196,3 @@ copy_resources_to_target(AudioPlugin02_Standalone)
 # copy_resources_to_target(AudioPlugin02_VST3)
 # copy_resources_to_target(AudioPlugin02_AU)
 
-# ============================================================
-# Summary
-# ============================================================
-
-message(STATUS "")
-message(STATUS "==============================================")
-message(STATUS "Audio Plugin 02 - Embedded WebView Version")
-message(STATUS "==============================================")
-message(STATUS "Web resources embedded via BinaryData AND copied to bundle")
-message(STATUS "==============================================")
-message(STATUS "")

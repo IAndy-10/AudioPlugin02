@@ -1,15 +1,23 @@
 import './index.css';
-import { initializeApp } from './app';
-import './bridge/bridge';
+import App from './App.svelte';
+import './bridge/bridge'; // Keeps the bridge listener active
 
-document.addEventListener('DOMContentLoaded', async () => {
+const target = document.getElementById('app');
+
+if (!target) {
+    console.error('Fatal error: App container (#app) not found in DOM');
+} else {
     try {
-        await initializeApp();
+        new App({
+            target: target,
+        });
+        console.log('✓ Svelte Plugin UI initialized');
     } catch (error) {
-        console.error('Fatal error during initialization:', error);
-        const app = document.getElementById('app');
-        if (app) {
-            app.innerHTML = '<div class="text-red-500 text-center">Failed to load plugin UI</div>';
-        }
+        console.error('Fatal error during Svelte initialization:', error);
+        target.innerHTML = `
+            <div class="flex items-center justify-center h-full text-red-500 font-mono text-sm">
+                [FATAL ERROR]: UI_MOUNT_FAILED
+            </div>
+        `;
     }
-});
+}

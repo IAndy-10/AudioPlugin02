@@ -1,45 +1,19 @@
 import { bridge } from '../bridge/bridge';
 import { ParameterId } from '../types/parameters';
-import { store } from '../state/store';
+import { setParameterValue } from '../state/store';
 
-export class KnobControl {
-    private isDragging = false;
-    private minAngle = -135;
-    private maxAngle = 135;
+/**
+ * Svelte Action for knob dragging logic.
+ * Usage: <div use:knobControl={parameterId}>
+ */
+export function knobControl(node: HTMLElement, parameterId: ParameterId) {
+    let isDragging = false;
+    const minAngle = -135;
+    const maxAngle = 135;
+    const angleRange = maxAngle - minAngle;
 
-    constructor(
-        private element: HTMLElement,
-        private parameterId: ParameterId
-    ) {
-        this.attachEventListeners();
-    }
-
-    private attachEventListeners() {
-        this.element.addEventListener('mousedown', this.onMouseDown.bind(this));
-        document.addEventListener('mousemove', this.onMouseMove.bind(this));
-        document.addEventListener('mouseup', this.onMouseUp.bind(this));
-
-    }
-
-    private onMouseDown(e: MouseEvent) {
-        e.preventDefault();
-        this.isDragging = true;
-        this.updateFromEvent(e.clientX, e.clientY);
-    }
-
-
-    private onMouseMove(e: MouseEvent) {
-        if (!this.isDragging) return;
-        this.updateFromEvent(e.clientX, e.clientY);
-    }
-
-    
-    private onMouseUp() {
-        this.isDragging = false;
-    }
-
-    private updateFromEvent(clientX: number, clientY: number) {
-        const rect = this.element.getBoundingClientRect();
+    const updateFromEvent = (clientX: number, clientY: number) => {
+        const rect = node.getBoundingClientRect();
         const centerX = rect.left + rect.width / 2;
         const centerY = rect.top + rect.height / 2;
 
@@ -48,11 +22,44 @@ export class KnobControl {
 
         if (angle > 180) angle -= 360;
 
-        const angleRange = this.maxAngle - this.minAngle;
-        const clampedAngle = Math.max(this.minAngle, Math.min(this.maxAngle, angle));
-        const value = Math.round(((clampedAngle - this.minAngle) / angleRange) * 100);
+        const clampedAngle = Math.max(minAngle, Math.min(maxAngle, angle));
+        const value = Math.round(((clampedAngle - minAngle) / angleRange) * 100);
 
-        store.setParameterValue(this.parameterId, value);
-        bridge.sendParameterChange(this.parameterId, value);
-    }
+        // 1. Update our Svelte Store (which updates the UI automatically)
+        setParameterValue(parameterId, value);
+        
+        // 2. Send the value to the C++ Engine via the Bridge
+        bridge.sendParameterChange(parameterId, value);
+    };
+
+    const onMouseDown = (e: MouseEvent) => {
+        // Prevent selecting text or dragging images while moving the knob
+        e.preventDefault();
+        isDragging = true;
+        updateFromEvent(e.clientX, e.clientY);
+    };
+
+    const onMouseMove = (e: MouseEvent) => {
+        if (!isDragging) return;
+        updateFromEvent(e.clientX, e.clientY);
+    };
+
+    const onMouseUp = () => {
+        isDragging = false;
+    };
+
+    // Attach listeners
+    node.addEventListener('mousedown', onMouseDown);
+    // Move and Up are on window so the user can drag outside the knob area
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+
+    return {
+        // Svelte calls this automatically when the component is destroyed
+        destroy() {
+            node.removeEventListener('mousedown', onMouseDown);
+            window.removeEventListener('mousemove', onMouseMove);
+            window.removeEventListener('mouseup', onMouseUp);
+        }
+    };
 }

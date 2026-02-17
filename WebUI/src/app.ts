@@ -1,47 +1,25 @@
-import { createKnob } from './components/knobComponent';
+import './index.css';
+import App from './App.svelte';
 
-type ComponentType = 'knob'; // | 'slider' | 'meter';
-
-interface ComponentFactory {
-    create: (container: HTMLElement, parameterId: string) => Promise<void>;
-}
-
-const factories: Record<ComponentType, ComponentFactory> = {
-    knob: { create: createKnob },
-    // slider: { create: createSlider },
-    // meter: { create: createMeter },
-};
-
-export async function initializeApp() {
-    const app = document.getElementById('app');
+/**
+ * initializeApp now simply mounts the root Svelte component.
+ * Svelte will handle the creation and lifecycle of all Knobs, 
+ * Sliders, and Meters defined inside App.svelte.
+ */
+export function initializeApp() {
+    const target = document.getElementById('app');
     
-    if (!app) {
+    if (!target) {
         throw new Error('App container (#app) not found in DOM');
     }
 
-    const components = app.querySelectorAll('[data-component]');
+    // This creates the entire UI hierarchy
+    new App({
+        target: target,
+    });
 
-    for (const el of components) {
-        const type = el.getAttribute('data-component') as ComponentType;
-        const parameterId = el.getAttribute('data-param');
-
-        if (!type || !parameterId) {
-            console.warn('Invalid component config:', el);
-            continue;
-        }
-
-        try {
-            const factory = factories[type];
-            if (!factory) {
-                throw new Error(`Unknown component type: ${type}`);
-            }
-
-            await factory.create(el as HTMLElement, parameterId);
-            console.log(`✓ Mounted ${type}: ${parameterId}`);
-        } catch (error) {
-            console.error(`✗ Failed to mount ${type}/${parameterId}:`, error);
-        }
-    }
-
-    console.log('✓ Plugin UI initialized');
+    console.log('✓ Svelte UI initialized');
 }
+
+// Auto-boot if needed, or call this from your index.html
+document.addEventListener('DOMContentLoaded', initializeApp);
