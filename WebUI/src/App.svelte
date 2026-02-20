@@ -1,6 +1,8 @@
 <script lang="ts">
+    import Header from "./components/header.svelte";
     import Knob from "./components/knob.svelte";
-    import WaveSelector from "./components/waveSelector.svelte";
+    // import WaveSelector from "./components/waveSelector.svelte";
+    import AudioPlayer from "./components/audioPlayer.svelte";
 </script>
 
 <main
@@ -14,28 +16,12 @@
         ></div>
 
         <div class="relative flex flex-col items-center gap-12">
-            <header class="text-center space-y-1">
-                <h1
-                    class="text-4xl font-black tracking-tighter uppercase italic bg-gradient-to-b from-white to-zinc-500 bg-clip-text text-transparent drop-shadow-2xl"
-                >
-                    Audio Plugin 02
-                </h1>
-                <div class="flex items-center justify-center gap-2">
-                    <span class="h-[1px] w-8 bg-zinc-700"></span>
-                    <p
-                        class="text-zinc-500 text-[10px] font-bold tracking-[0.4em] uppercase"
-                    >
-                        Svelte Control Surface
-                    </p>
-                    <span class="h-[1px] w-8 bg-zinc-700"></span>
-                </div>
-            </header>
-
+            <Header />
             <div
                 class="flex items-center gap-16 p-10 bg-black/40 rounded-3xl border border-white/5 shadow-inner min-w-[500px] justify-center"
             >
+                <AudioPlayer parameterId="playing" />
                 <Knob parameterId="gain" />
-                <WaveSelector parameterId="waveform" />
             </div>
 
             <footer class="flex flex-col items-center gap-4">
@@ -43,8 +29,6 @@
                     <div
                         class="w-1.5 h-1.5 rounded-full bg-cyan-500 shadow-[0_0_8px_#06b6d4] animate-pulse"
                     ></div>
-                    <div class="w-1.5 h-1.5 rounded-full bg-zinc-800"></div>
-                    <div class="w-1.5 h-1.5 rounded-full bg-zinc-800"></div>
                 </div>
             </footer>
         </div>

@@ -120,6 +120,27 @@ export interface BypassRequest {
     bypassed: boolean;
 }
 
+/**
+ * Play/Stop/Pause/Resume
+ */
+export interface PlayRequest {
+    type: 'play';
+}
+
+export interface StopRequest {
+    type: 'stop';
+}
+
+export interface PauseRequest {
+    type: 'pause';
+}
+
+export interface ResumeRequest {
+    type: 'resume';
+}
+
+
+
 // ============================================
 // Message Unions
 // ============================================

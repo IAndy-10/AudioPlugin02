@@ -10,10 +10,10 @@ const initialValue: ParameterState = {
         max: 100,
         defaultValue: 50
     },
-    waveform: {
-        id: 'waveform',
-        name: 'Waveform',
-        value: 0, // Index 0 = Saw
+    playing: {
+        id: 'playing',
+        name: 'Playing',
+        value: 0, // 0 = Off, 1 = On
         min: 0,
         max: 1,
         defaultValue: 0
@@ -41,6 +41,6 @@ export const setParameterValue = (id: keyof ParameterState, value: number) => {
     });
 };
 
-export const setWaveformValue = (value: number) => {
-    setParameterValue('waveform', value);
+export const setPlayingValue = (value: number) => {
+    setParameterValue('playing', value);
 };

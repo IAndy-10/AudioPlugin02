@@ -1,10 +1,4 @@
-/**
-How does this file map the name of the parameters?
-
-
- */
-
-export type ParameterId = 'gain' | 'waveform';
+export type ParameterId = 'gain' | 'playing';
 
 export interface PluginParameter {
     id: ParameterId;
@@ -13,11 +7,6 @@ export interface PluginParameter {
     min: number;
     max: number;
     defaultValue: number;
-}
-
-export interface WaveformParameter extends PluginParameter {
-    id: 'waveform';
-    choices: string[]; // e.g., ["Saw", "Noise"]
 }
 
 export type ParameterState = Record<ParameterId, PluginParameter>;

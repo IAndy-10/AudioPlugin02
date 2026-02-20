@@ -1,12 +1,7 @@
 #include "PluginProcessor.h"
 #include "ParameterLayout.h"
 #include "PluginEditor.h"
-#include "saw.h"
-#include "noise.h"
 #include <fstream>
-
-std::unique_ptr<plugin01::FMSaw> osc;
-std::unique_ptr<plugin01::NoiseGenerator> noise;
 
 //==============================================================================
 AudioPluginAudioProcessor::AudioPluginAudioProcessor()
@@ -20,6 +15,11 @@ AudioPluginAudioProcessor::AudioPluginAudioProcessor()
 #endif
               ),
       apvts(*this, nullptr, "Parameters", createParameterLayout()) {
+  // Initialize audio format manager
+  audioFormatManager.registerBasicFormats();
+
+  // Initialize transport source
+  transportSource = std::make_unique<juce::AudioTransportSource>();
 }
 
 AudioPluginAudioProcessor::~AudioPluginAudioProcessor() {}
@@ -74,16 +74,17 @@ void AudioPluginAudioProcessor::changeProgramName(int index,
 }
 
 //==============================================================================
-void AudioPluginAudioProcessor::prepareToPlay(double sampleRate, int) {
-  osc = std::make_unique<plugin01::FMSaw>((float)sampleRate);
+void AudioPluginAudioProcessor::prepareToPlay(double sampleRate,
+                                              int samplesPerBlock) {
+  currentSampleRate = sampleRate;
 
-  float initFreq = (float)juce::MidiMessage::getMidiNoteInHertz(60.0f);
-
-  osc->frequency(initFreq);
+  // Prepare the transport source
+  transportSource->prepareToPlay(samplesPerBlock, sampleRate);
 }
 
-void AudioPluginAudioProcessor::releaseResources() {}
-
+void AudioPluginAudioProcessor::releaseResources() {
+  transportSource->releaseResources();
+}
 bool AudioPluginAudioProcessor::isBusesLayoutSupported(
     const BusesLayout &layouts) const {
 #if JucePlugin_IsMidiEffect
@@ -114,30 +115,93 @@ void AudioPluginAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer,
 
   float gainDb =
       apvts.getRawParameterValue(PluginParamIDs::gain.getParamID())->load();
-  int waveformChoice =
-      (int)apvts.getRawParameterValue(PluginParamIDs::waveform.getParamID())
-          ->load();
+
+  bool shouldPlayAudio =
+      apvts.getRawParameterValue(PluginParamIDs::playing.getParamID())->load() >
+      0.5f;
+
+  if (!shouldPlayAudio) {
+    buffer.clear();
+    return;
+  }
 
   float gainAmp = juce::Decibels::decibelsToGain(gainDb);
 
-  // Get pointers to the audio channels
-  float *leftChannel = buffer.getWritePointer(0);
-  float *rightChannel =
-      totalNumOutputChannels > 1 ? buffer.getWritePointer(1) : nullptr;
+  // Get audio data from the transport source
+  juce::AudioSourceChannelInfo info(&buffer, 0, buffer.getNumSamples());
+  transportSource->getNextAudioBlock(info);
 
-  for (int sample = 0; sample < buffer.getNumSamples(); ++sample) {
-    float outSample = 0.0f;
+  // Apply gain to the output
+  buffer.applyGain(gainAmp);
+}
 
-    if (waveformChoice == 0) {
-      outSample = osc->process() * gainAmp;
-    } else if (waveformChoice == 1) {
-      outSample = noise->process() * gainAmp;
-    }
-
-    leftChannel[sample] = outSample;
-    if (rightChannel)
-      rightChannel[sample] = outSample;
+// =============================================================================
+void AudioPluginAudioProcessor::loadAudioFile(const juce::File &audioFile) {
+  if (!audioFile.existsAsFile()) {
+    juce::Logger::getCurrentLogger()->writeToLog("Audio file not found: " +
+                                                 audioFile.getFullPathName());
+    return;
   }
+
+  auto reader = audioFormatManager.createReaderFor(audioFile);
+  if (reader != nullptr) {
+    readerSource =
+        std::make_unique<juce::AudioFormatReaderSource>(reader, true);
+    // Must set source before (re-)preparing the transport
+    transportSource->setSource(readerSource.get(),
+                               0, // read-ahead buffer size (0 = synchronous)
+                               nullptr, // time-slice thread
+                               reader->sampleRate,
+                               2); // num channels
+    // If audio is already running, re-prepare with current settings
+    if (currentSampleRate > 0.0)
+      transportSource->prepareToPlay(512, currentSampleRate);
+    juce::Logger::getCurrentLogger()->writeToLog("Audio file loaded: " +
+                                                 audioFile.getFullPathName());
+  } else {
+    juce::Logger::getCurrentLogger()->writeToLog("Failed to read audio file: " +
+                                                 audioFile.getFullPathName());
+  }
+}
+
+void AudioPluginAudioProcessor::loadAudioFromMemory(const void *data,
+                                                    int sizeInBytes) {
+  // JUCE 7+ requires unique_ptr ownership transfer for createReaderFor
+  auto stream = std::make_unique<juce::MemoryInputStream>(
+      data, (size_t)sizeInBytes, false);
+  auto reader = audioFormatManager.createReaderFor(std::move(stream));
+
+  if (reader != nullptr) {
+    readerSource =
+        std::make_unique<juce::AudioFormatReaderSource>(reader, true);
+    transportSource->setSource(readerSource.get(), 0, nullptr,
+                               reader->sampleRate, 2);
+    if (currentSampleRate > 0.0)
+      transportSource->prepareToPlay(512, currentSampleRate);
+    juce::Logger::getCurrentLogger()->writeToLog(
+        "Audio loaded from binary data - OK");
+  } else {
+    // stream is already deleted by unique_ptr if createReaderFor failed
+    juce::Logger::getCurrentLogger()->writeToLog(
+        "Failed to decode audio from binary data");
+  }
+}
+
+void AudioPluginAudioProcessor::playAudio() {
+  if (readerSource != nullptr) {
+    transportSource->start();
+    isPlaying = true;
+    juce::Logger::getCurrentLogger()->writeToLog("Playing audio");
+  } else {
+    juce::Logger::getCurrentLogger()->writeToLog("No audio file loaded");
+  }
+}
+
+void AudioPluginAudioProcessor::stopAudio() {
+  transportSource->stop();
+  transportSource->setPosition(0.0);
+  isPlaying = false;
+  juce::Logger::getCurrentLogger()->writeToLog("Stopped audio");
 }
 
 //==============================================================================

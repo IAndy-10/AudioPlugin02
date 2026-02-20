@@ -162,7 +162,6 @@
 </div>
 
 <style>
-    /* Prevent text selection during drag */
     .group {
         user-select: none;
     }

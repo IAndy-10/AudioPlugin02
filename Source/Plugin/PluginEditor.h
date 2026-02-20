@@ -19,13 +19,13 @@ private:
   AudioPluginAudioProcessor &processorRef;
 
   std::unique_ptr<WebViewBridge> webView;
-  
+
   // Handle parameter changes from JavaScript
-  void onParameterChangedFromJS(const juce::String& paramName, float value);
-  
+  void onParameterChangedFromJS(const juce::String &paramName, float value);
+
   // Send parameter updates to JavaScript
   void sendGainToJS(float gainValue);
-  
+
   float lastGainValue = -60.0f;
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AudioPluginAudioProcessorEditor)

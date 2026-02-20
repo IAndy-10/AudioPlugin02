@@ -69,15 +69,19 @@ export class ParameterBridge {
     }
 
     public sendParameterChange(id: ParameterId, value: number) {
-        if (value < 0 || value > 100) return;
+        let finalValue = value;
 
-        const gainDb = this.normalizedToDB(value);
-        this.log(`Sending to C++: ${id} = ${value}% (${gainDb.toFixed(2)} dB)`);
+        if (id === 'gain') {
+            finalValue = this.normalizedToDB(value);
+            this.log(`Sending to C++: ${id} = ${value}% (${finalValue.toFixed(2)} dB)`);
+        } else {
+            this.log(`Sending to C++: ${id} = ${value}`);
+        }
 
         /**
          * JS → C++: Communication via JUCE URL scheme
          */
-        window.location.href = `juce://setparameter?name=${id}&value=${gainDb}`;
+        window.location.href = `juce://setparameter?name=${id}&value=${finalValue}`;
     }
 
     private normalizedToDB(value: number): number {

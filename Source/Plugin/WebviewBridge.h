@@ -21,9 +21,32 @@ public:
         }
         return true;
     }
+
+    // To play/stop/pause/resume
+    using PlayCallback = std::function<void()>;
+    using StopCallback = std::function<void()>;
+    using PauseCallback = std::function<void()>;
+    using ResumeCallback = std::function<void()>;
+
+    void setPlayCallback(PlayCallback callback) {
+        playCallback = callback;
+    }
+    void setStopCallback(StopCallback callback) {
+        stopCallback = callback;
+    }
+    void setPauseCallback(PauseCallback callback) {
+        pauseCallback = callback;
+    }
+    void setResumeCallback(ResumeCallback callback) {
+        resumeCallback = callback;
+    }
     
 private:
     ParameterCallback parameterCallback;
+    PlayCallback playCallback;
+    StopCallback stopCallback;
+    PauseCallback pauseCallback;
+    ResumeCallback resumeCallback;
     
    void handleBridgeURL(const juce::String& urlStr) {
         juce::URL juceURL(urlStr);
@@ -45,6 +68,26 @@ private:
                 if (parameterCallback) {
                     parameterCallback(paramName, paramValue);
                 }
+            }
+        }
+        else if (urlStr.contains("play")) {
+            if (playCallback) {
+                playCallback();
+            }
+        }
+        else if (urlStr.contains("stop")) {
+            if (stopCallback) {
+                stopCallback();
+            }
+        }
+        else if (urlStr.contains("pause")) {
+            if (pauseCallback) {
+                pauseCallback();
+            }
+        }
+        else if (urlStr.contains("resume")) {
+            if (resumeCallback) {
+                resumeCallback();
             }
         }
     }

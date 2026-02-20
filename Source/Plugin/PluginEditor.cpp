@@ -19,6 +19,23 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor(
         onParameterChangedFromJS(paramName, value);
       });
 
+  // Set up audio playback callbacks
+  webView->setPlayCallback([this]() {
+    juce::File audioFile = juce::File::getCurrentWorkingDirectory()
+                               .getChildFile("Source")
+                               .getChildFile("Audio")
+                               .getChildFile("this-is-a-test1.wav");
+
+    processorRef.loadAudioFile(audioFile);
+    processorRef.playAudio();
+  });
+
+  webView->setStopCallback([this]() { processorRef.stopAudio(); });
+
+  webView->setPauseCallback([this]() { processorRef.stopAudio(); });
+
+  webView->setResumeCallback([this]() { processorRef.playAudio(); });
+
   // 3. ONLY THEN call setSize (which triggers resized())
   setSize(750, 500);
 
@@ -99,6 +116,24 @@ void AudioPluginAudioProcessorEditor::onParameterChangedFromJS(
       lastGainValue = value; // Update cached value to prevent feedback loop
     }
   }
+
+  // --- Handle play/stop from JS ---
+  if (paramName == PluginParamIDs::playing.getParamID()) {
+    auto *param =
+        processorRef.apvts.getParameter(PluginParamIDs::playing.getParamID());
+    if (param != nullptr)
+      param->setValueNotifyingHost(value); // sync APVTS (0.0 or 1.0)
+
+    if (value > 0.5f) {
+      // Load from embedded binary data (compiled in from
+      // Source/Audio/this-is-a-test1.wav)
+      processorRef.loadAudioFromMemory(BinaryData::thisisatest1_wav,
+                                       BinaryData::thisisatest1_wavSize);
+      processorRef.playAudio();
+    } else {
+      processorRef.stopAudio();
+    }
+  }
 }
 
 //==============================================================================
@@ -107,8 +142,9 @@ void AudioPluginAudioProcessorEditor::sendGainToJS(float gainDb) {
   float percentage = juce::jmap(gainDb, -60.0f, 0.0f, 0.0f, 100.0f);
 
   // Functions that comes from the bridge.ts file
-  juce::String jsCode = "if (window.gainKnob) { window.gainKnob.setValue(" +
-                        juce::String(percentage) + "); }";
+  juce::String jsCode =
+      "if (window.setParameterValue) { window.setParameterValue('gain', " +
+      juce::String(percentage) + "); }";
 
   webView->evaluateJavascript(jsCode);
 }

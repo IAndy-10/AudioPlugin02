@@ -47,6 +47,12 @@ juce_add_plugin(AudioPlugin02
     IS_MIDI_EFFECT FALSE
     EDITOR_WANTS_KEYBOARD_FOCUS FALSE
 
+    NEEDS_JUCE_CORE TRUE
+    NEEDS_JUCE_AUDIO_FORMATS TRUE
+    NEEDS_JUCE_AUDIO_PROCESSORS TRUE
+    NEEDS_JUCE_GUI_BASICS TRUE
+    NEEDS_WEB_BROWSER TRUE
+
     COPY_PLUGIN_AFTER_BUILD TRUE
 
     VST3_CATEGORIES Fx
@@ -122,6 +128,7 @@ add_custom_command(
 juce_add_binary_data(AudioPlugin02_Resources
     SOURCES
         WebUI/dist/index.html
+        Source/Audio/this-is-a-test1.wav
 )
 
 
@@ -153,6 +160,8 @@ endif()
 
 target_link_libraries(AudioPlugin02 PRIVATE
     juce::juce_audio_utils
+    juce::juce_audio_formats
+    juce::juce_audio_devices
     juce::juce_audio_processors
     juce::juce_gui_basics
     juce::juce_gui_extra

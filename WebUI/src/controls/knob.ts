@@ -50,7 +50,6 @@ export function knobControl(node: HTMLElement, parameterId: ParameterId) {
 
     // Attach listeners
     node.addEventListener('mousedown', onMouseDown);
-    // Move and Up are on window so the user can drag outside the knob area
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
 
