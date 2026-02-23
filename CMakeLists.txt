@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.22) # Recommended for JUCE 8
 
 project(AudioPlugin02 VERSION 0.2.0)
 
@@ -10,25 +10,19 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # ============================================================
-# Add JUCE Submodule
+# JUCE - FetchContent (Managed Download)
 # ============================================================
 
-add_subdirectory(external/JUCE)
+include(FetchContent)
 
-# ============================================================
-# Fetch JUCE (self-contained)
-# ============================================================
+FetchContent_Declare(
+    JUCE
+    GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
+    GIT_TAG 8.0.4
+    GIT_SHALLOW TRUE
+)
 
-# include(FetchContent)
-
-# FetchContent_Declare(
-    # JUCE
-    # GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
-    # GIT_TAG 8.0.4
-   #  GIT_SHALLOW TRUE
-# )
-
-# FetchContent_MakeAvailable(JUCE)
+FetchContent_MakeAvailable(JUCE)
 
 # ============================================================
 # Plugin Definition
@@ -86,59 +80,26 @@ target_include_directories(AudioPlugin02 PRIVATE
     Source/Parameters
 )
 
-
 # ============================================================
-# Svelte Build
+# Svelte Build Logic (Fixed for BinaryData)
 # ============================================================
 
-# Ensure node_modules is installed
-add_custom_command(
-    OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/WebUI/node_modules/.installed"
+# This ensures the directory exists so CMake doesn't complain during configuration
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/WebUI/dist")
+
+# Create a dummy index.html if it doesn't exist, just to satisfy the initial check
+if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/WebUI/dist/index.html")
+    file(WRITE "${CMAKE_CURRENT_SOURCE_DIR}/WebUI/dist/index.html" "<html><body>Loading...</body></html>")
+endif()
+
+# Force the build to run during the build phase
+add_custom_target(BuildSvelteUI ALL
     COMMAND npm install
-    COMMAND ${CMAKE_COMMAND} -E touch "${CMAKE_CURRENT_SOURCE_DIR}/WebUI/node_modules/.installed"
-    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/WebUI"
-    COMMENT "Installing npm dependencies..."
-    VERBATIM
-)
-
-# Build Svelte when source files change
-add_custom_command(
-    OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/WebUI/dist/index.html"
     COMMAND npm run build
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/WebUI"
-    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/WebUI/node_modules/.installed"
-    COMMENT "Building Svelte frontend..."
+    COMMENT "Installing dependencies and building Svelte frontend..."
     VERBATIM
 )
-
-# Link the output so CMake knows it's needed
-add_custom_target(WebUI_Build ALL
-    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/WebUI/dist/index.html"
-)
-
-add_dependencies(AudioPlugin02 WebUI_Build)
-
-
-# ============================================================
-# Embed Web Resources Into Binary
-# ============================================================
-
-# 1. Force a clean of the dist folder to prevent stale assets
-add_custom_command(
-    TARGET AudioPlugin02 PRE_BUILD
-    COMMAND ${CMAKE_COMMAND} -E remove_directory "${CMAKE_CURRENT_SOURCE_DIR}/WebUI/dist"
-    COMMENT "Clearing old UI distribution files..."
-)
-
-# 2. Run the actual Svelte build
-add_custom_command(
-    TARGET AudioPlugin02 PRE_BUILD
-    COMMAND npm run build
-    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/WebUI"
-    COMMENT "Building fresh Svelte frontend..."
-)
-
-
 
 # ============================================================
 # Embed Web Resources Into Binary
@@ -150,13 +111,11 @@ juce_add_binary_data(AudioPlugin02_Resources
         Source/Audio/this-is-a-test1.wav
 )
 
-
-target_link_libraries(AudioPlugin02 PRIVATE
-    AudioPlugin02_Resources
-)
+# Crucial: Make the resources wait for the UI build to finish
+add_dependencies(AudioPlugin02_Resources BuildSvelteUI)
 
 # ============================================================
-# Compile Definitions
+# Compile Definitions & Linking
 # ============================================================
 
 target_compile_definitions(AudioPlugin02 PUBLIC
@@ -173,11 +132,8 @@ if(APPLE)
     )
 endif()
 
-# ============================================================
-# JUCE Modules
-# ============================================================
-
 target_link_libraries(AudioPlugin02 PRIVATE
+    AudioPlugin02_Resources
     juce::juce_audio_utils
     juce::juce_audio_formats
     juce::juce_audio_devices
@@ -191,23 +147,9 @@ PUBLIC
 )
 
 # ============================================================
-# Linux WebKit Dependency
+# Copy Resources to Bundle (Post-Build)
 # ============================================================
 
-if(UNIX AND NOT APPLE)
-    find_package(PkgConfig REQUIRED)
-    pkg_check_modules(WEBKIT2 REQUIRED webkit2gtk-4.0)
-
-    target_include_directories(AudioPlugin02 PRIVATE ${WEBKIT2_INCLUDE_DIRS})
-    target_link_libraries(AudioPlugin02 PRIVATE ${WEBKIT2_LIBRARIES})
-endif()
-
-
-# ============================================================
-# Copy Resources to Bundle
-# ============================================================
-
-# Helper macro to copy resources for a specific target
 macro(copy_resources_to_target target_name)
     if(TARGET ${target_name})
         add_custom_command(TARGET ${target_name} POST_BUILD
@@ -218,9 +160,5 @@ macro(copy_resources_to_target target_name)
     endif()
 endmacro()
 
-# Apply to all generated targets
 copy_resources_to_target(AudioPlugin02)
 copy_resources_to_target(AudioPlugin02_Standalone)
-# copy_resources_to_target(AudioPlugin02_VST3)
-# copy_resources_to_target(AudioPlugin02_AU)
-
