@@ -9,6 +9,7 @@
     $: state = $store[parameterId];
     $: isPlaying = state?.value > 0.5;
     $: name = state?.name ?? "Player";
+    
 
 </script>
 

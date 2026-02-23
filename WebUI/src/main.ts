@@ -1,6 +1,6 @@
 import './index.css';
 import App from './App.svelte';
-import './bridge/bridge'; // Keeps the bridge listener active
+import './bridge/bridge';
 
 const target = document.getElementById('app');
 

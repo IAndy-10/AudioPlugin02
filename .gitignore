@@ -27,3 +27,7 @@ Thumbs.db
 *.vst3
 *.component
 *.aaxplugin
+
+# Documentation
+*.md
+

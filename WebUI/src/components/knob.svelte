@@ -58,7 +58,7 @@
 <div class="flex flex-col items-center group">
     <div
         use:knobControl={parameterId}
-        class="relative w-48 h-48 flex-shrink-0 cursor-none active:cursor-none flex items-center justify-center"
+        class="relative w-48 h-48 flex-shrink-0 cursor-grab active:cursor-grabbing flex items-center justify-center"
     >
         <svg
             viewBox="0 0 200 200"

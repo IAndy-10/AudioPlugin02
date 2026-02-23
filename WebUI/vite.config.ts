@@ -4,7 +4,7 @@ import { svelte, vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 
 export default defineConfig({
     plugins: [
-        viteSingleFile(),
+        ...(process.env.NODE_ENV === 'production' ? [viteSingleFile()] : []),
         svelte({
             preprocess: vitePreprocess(),
         }),
@@ -13,7 +13,10 @@ export default defineConfig({
         outDir: 'dist',
         emptyOutDir: true,
     },
+    server: {
+        middlewareMode: false,
+    },
+    optimizeDeps: {
+        include: ['svelte'],
+    },
 });
-
-
-

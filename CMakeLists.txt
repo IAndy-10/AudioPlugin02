@@ -91,13 +91,32 @@ target_include_directories(AudioPlugin02 PRIVATE
 # Svelte Build
 # ============================================================
 
+# Ensure node_modules is installed
+add_custom_command(
+    OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/WebUI/node_modules/.installed"
+    COMMAND npm install
+    COMMAND ${CMAKE_COMMAND} -E touch "${CMAKE_CURRENT_SOURCE_DIR}/WebUI/node_modules/.installed"
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/WebUI"
+    COMMENT "Installing npm dependencies..."
+    VERBATIM
+)
+
+# Build Svelte when source files change
 add_custom_command(
     OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/WebUI/dist/index.html"
     COMMAND npm run build
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/WebUI"
+    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/WebUI/node_modules/.installed"
     COMMENT "Building Svelte frontend..."
     VERBATIM
 )
+
+# Link the output so CMake knows it's needed
+add_custom_target(WebUI_Build ALL
+    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/WebUI/dist/index.html"
+)
+
+add_dependencies(AudioPlugin02 WebUI_Build)
 
 
 # ============================================================
