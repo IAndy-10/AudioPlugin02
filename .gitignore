@@ -1,3 +1,6 @@
+echo "!Source/Audio/this-is-a-test1.wav" >> .gitignore
+
+
 # Build directories
 build/
 cmake-build-*/
@@ -30,4 +33,5 @@ Thumbs.db
 
 # Documentation
 *.md
+/docs
 

@@ -1,234 +1,198 @@
 #include "PluginProcessor.h"
 #include "ParameterLayout.h"
+#include "ParameterIDs.h"
 #include "PluginEditor.h"
-#include <fstream>
 
-//==============================================================================
+using namespace PluginParamIDs;
+
 AudioPluginAudioProcessor::AudioPluginAudioProcessor()
     : AudioProcessor(
           BusesProperties()
 #if !JucePlugin_IsMidiEffect
 #if !JucePlugin_IsSynth
-              .withInput("Input", juce::AudioChannelSet::stereo(), true)
+              .withInput("Input",  juce::AudioChannelSet::stereo(), true)
 #endif
               .withOutput("Output", juce::AudioChannelSet::stereo(), true)
 #endif
-              ),
-      apvts(*this, nullptr, "Parameters", createParameterLayout()) {
-  // Initialize audio format manager
-  audioFormatManager.registerBasicFormats();
-
-  // Initialize transport source
-  transportSource = std::make_unique<juce::AudioTransportSource>();
-}
+      ),
+      apvts(*this, nullptr, "Parameters", createParameterLayout())
+{}
 
 AudioPluginAudioProcessor::~AudioPluginAudioProcessor() {}
 
-//==============================================================================
-const juce::String AudioPluginAudioProcessor::getName() const {
-  return JucePlugin_Name;
-}
-
-bool AudioPluginAudioProcessor::acceptsMidi() const {
-#if JucePlugin_WantsMidiInput
-  return true;
-#else
-  return false;
-#endif
-}
-
-bool AudioPluginAudioProcessor::producesMidi() const {
-#if JucePlugin_ProducesMidiOutput
-  return true;
-#else
-  return false;
-#endif
-}
-
-bool AudioPluginAudioProcessor::isMidiEffect() const {
-#if JucePlugin_IsMidiEffect
-  return true;
-#else
-  return false;
-#endif
-}
-
-double AudioPluginAudioProcessor::getTailLengthSeconds() const { return 0.0; }
-
+const juce::String AudioPluginAudioProcessor::getName() const { return JucePlugin_Name; }
+bool AudioPluginAudioProcessor::acceptsMidi()  const { return true;  }
+bool AudioPluginAudioProcessor::producesMidi() const { return false; }
+bool AudioPluginAudioProcessor::isMidiEffect() const { return false; }
+double AudioPluginAudioProcessor::getTailLengthSeconds() const { return 10.0; }
 int AudioPluginAudioProcessor::getNumPrograms() { return 1; }
-
 int AudioPluginAudioProcessor::getCurrentProgram() { return 0; }
+void AudioPluginAudioProcessor::setCurrentProgram(int) {}
+const juce::String AudioPluginAudioProcessor::getProgramName(int) { return {}; }
+void AudioPluginAudioProcessor::changeProgramName(int, const juce::String&) {}
 
-void AudioPluginAudioProcessor::setCurrentProgram(int index) {
-  juce::ignoreUnused(index);
-}
-
-const juce::String AudioPluginAudioProcessor::getProgramName(int index) {
-  juce::ignoreUnused(index);
-  return {};
-}
-
-void AudioPluginAudioProcessor::changeProgramName(int index,
-                                                  const juce::String &newName) {
-  juce::ignoreUnused(index, newName);
-}
-
-//==============================================================================
-void AudioPluginAudioProcessor::prepareToPlay(double sampleRate,
-                                              int samplesPerBlock) {
-  currentSampleRate = sampleRate;
-
-  // Prepare the transport source
-  transportSource->prepareToPlay(samplesPerBlock, sampleRate);
-}
-
-void AudioPluginAudioProcessor::releaseResources() {
-  transportSource->releaseResources();
-}
-bool AudioPluginAudioProcessor::isBusesLayoutSupported(
-    const BusesLayout &layouts) const {
+bool AudioPluginAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const {
 #if JucePlugin_IsMidiEffect
-  juce::ignoreUnused(layouts);
-  return true;
+    juce::ignoreUnused(layouts);
+    return true;
 #else
-  if (layouts.getMainOutputChannelSet() != juce::AudioChannelSet::mono() &&
-      layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo())
-    return false;
-
+    if (layouts.getMainOutputChannelSet() != juce::AudioChannelSet::mono() &&
+        layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo())
+        return false;
 #if !JucePlugin_IsSynth
-  if (layouts.getMainOutputChannelSet() != layouts.getMainInputChannelSet())
-    return false;
+    if (layouts.getMainOutputChannelSet() != layouts.getMainInputChannelSet())
+        return false;
 #endif
-
-  return true;
+    return true;
 #endif
 }
 
-void AudioPluginAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer,
-                                             juce::MidiBuffer &midiMessages) {
-  juce::ScopedNoDenormals noDenormals;
-  juce::ignoreUnused(midiMessages);
-  auto totalNumOutputChannels = getTotalNumOutputChannels();
+void AudioPluginAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
+    juce::ignoreUnused(samplesPerBlock);
 
-  for (auto i = getTotalNumInputChannels(); i < totalNumOutputChannels; ++i)
-    buffer.clear(i, 0, buffer.getNumSamples());
+    // Prepare DSP modules
+    inputFilter.prepare(sampleRate);
+    predelayModule.prepare(sampleRate);
+    earlyReflections.prepare(sampleRate);
+    fdnReverb.prepare(sampleRate);
+    chorusModule.prepare(sampleRate);
+    stereoWidener.setWidth(1.0f);
 
-  float gainDb =
-      apvts.getRawParameterValue(PluginParamIDs::gain.getParamID())->load();
+    // Prepare smoothed values (10ms smoothing time)
+    auto initSmooth = [&](juce::SmoothedValue<float>& sv, float initial) {
+        sv.reset(sampleRate, 0.01);
+        sv.setCurrentAndTargetValue(initial);
+    };
 
-  bool shouldPlayAudio =
-      apvts.getRawParameterValue(PluginParamIDs::playing.getParamID())->load() >
-      0.5f;
+    initSmooth(smoothDecay,         apvts.getRawParameterValue(decay.getParamID())->load());
+    initSmooth(smoothDiffusion,     apvts.getRawParameterValue(diffusion.getParamID())->load());
+    initSmooth(smoothSize,          apvts.getRawParameterValue(size.getParamID())->load());
+    initSmooth(smoothDamping,       apvts.getRawParameterValue(damping.getParamID())->load());
+    initSmooth(smoothFeedback,      apvts.getRawParameterValue(feedback.getParamID())->load());
+    initSmooth(smoothPredelay,      apvts.getRawParameterValue(PluginParamIDs::predelay.getParamID())->load());
+    initSmooth(smoothStereo,        apvts.getRawParameterValue(stereo.getParamID())->load());
+    initSmooth(smoothDryWet,        apvts.getRawParameterValue(dryWet.getParamID())->load());
+    initSmooth(smoothChorusAmount,  apvts.getRawParameterValue(chorusAmount.getParamID())->load());
+    initSmooth(smoothChorusRate,    apvts.getRawParameterValue(chorusRate.getParamID())->load());
+    initSmooth(smoothCrossoverFreq, apvts.getRawParameterValue(crossoverFreq.getParamID())->load());
+    initSmooth(smoothReflectGain,   apvts.getRawParameterValue(reflectGain.getParamID())->load());
+    initSmooth(smoothDiffuseGain,   apvts.getRawParameterValue(diffuseGain.getParamID())->load());
+    initSmooth(smoothErAmount,      apvts.getRawParameterValue(erAmount.getParamID())->load());
+    initSmooth(smoothErRate,        apvts.getRawParameterValue(erRate.getParamID())->load());
+    initSmooth(smoothLoCutFreq,     apvts.getRawParameterValue(loCutFreq.getParamID())->load());
+    initSmooth(smoothHiCutFreq,     apvts.getRawParameterValue(hiCutFreq.getParamID())->load());
 
-  if (!shouldPlayAudio) {
-    buffer.clear();
-    return;
-  }
-
-  float gainAmp = juce::Decibels::decibelsToGain(gainDb);
-
-  // Get audio data from the transport source
-  juce::AudioSourceChannelInfo info(&buffer, 0, buffer.getNumSamples());
-  transportSource->getNextAudioBlock(info);
-
-  // Apply gain to the output
-  buffer.applyGain(gainAmp);
+    updateDSPParameters();
 }
 
-// =============================================================================
-void AudioPluginAudioProcessor::loadAudioFile(const juce::File &audioFile) {
-  if (!audioFile.existsAsFile()) {
-    juce::Logger::getCurrentLogger()->writeToLog("Audio file not found: " +
-                                                 audioFile.getFullPathName());
-    return;
-  }
+void AudioPluginAudioProcessor::releaseResources() {}
 
-  auto reader = audioFormatManager.createReaderFor(audioFile);
-  if (reader != nullptr) {
-    readerSource =
-        std::make_unique<juce::AudioFormatReaderSource>(reader, true);
-    // Must set source before (re-)preparing the transport
-    transportSource->setSource(readerSource.get(),
-                               0, // read-ahead buffer size (0 = synchronous)
-                               nullptr, // time-slice thread
-                               reader->sampleRate,
-                               2); // num channels
-    // If audio is already running, re-prepare with current settings
-    if (currentSampleRate > 0.0)
-      transportSource->prepareToPlay(512, currentSampleRate);
-    juce::Logger::getCurrentLogger()->writeToLog("Audio file loaded: " +
-                                                 audioFile.getFullPathName());
-  } else {
-    juce::Logger::getCurrentLogger()->writeToLog("Failed to read audio file: " +
-                                                 audioFile.getFullPathName());
-  }
+void AudioPluginAudioProcessor::updateDSPParameters() {
+    // Input filter
+    inputFilter.setLoCutEnabled(apvts.getRawParameterValue(loCutEnabled.getParamID())->load() > 0.5f);
+    inputFilter.setHiCutEnabled(apvts.getRawParameterValue(hiCutEnabled.getParamID())->load() > 0.5f);
+    inputFilter.setLoCutFreq(apvts.getRawParameterValue(loCutFreq.getParamID())->load());
+    inputFilter.setHiCutFreq(apvts.getRawParameterValue(hiCutFreq.getParamID())->load());
+
+    // Early reflections
+    earlyReflections.setEnabled(apvts.getRawParameterValue(erEnabled.getParamID())->load() > 0.5f);
+    earlyReflections.setAmount(apvts.getRawParameterValue(erAmount.getParamID())->load());
+    earlyReflections.setRate(apvts.getRawParameterValue(erRate.getParamID())->load());
+    earlyReflections.setShape(apvts.getRawParameterValue(erShape.getParamID())->load());
+
+    // FDN
+    fdnReverb.setDecayMs(apvts.getRawParameterValue(decay.getParamID())->load());
+    fdnReverb.setDiffusion(apvts.getRawParameterValue(diffusion.getParamID())->load());
+    fdnReverb.setSize(apvts.getRawParameterValue(size.getParamID())->load());
+    fdnReverb.setDamping(apvts.getRawParameterValue(damping.getParamID())->load());
+    fdnReverb.setFeedback(apvts.getRawParameterValue(feedback.getParamID())->load());
+    fdnReverb.setCrossoverFreq(apvts.getRawParameterValue(crossoverFreq.getParamID())->load());
+    fdnReverb.setReverbMode(static_cast<int>(apvts.getRawParameterValue(reverbMode.getParamID())->load()));
+    fdnReverb.setFrozen(apvts.getRawParameterValue(PluginParamIDs::freeze.getParamID())->load() > 0.5f);
+
+    // Chorus
+    chorusModule.setAmount(apvts.getRawParameterValue(chorusAmount.getParamID())->load());
+    chorusModule.setRate(apvts.getRawParameterValue(chorusRate.getParamID())->load());
+
+    // Predelay
+    predelayModule.setDelayMs(apvts.getRawParameterValue(PluginParamIDs::predelay.getParamID())->load());
+
+    // Widener
+    stereoWidener.setWidth(apvts.getRawParameterValue(stereo.getParamID())->load());
+
+    // Mixer
+    dryWetMixer.setMix(apvts.getRawParameterValue(dryWet.getParamID())->load() / 100.0f);
 }
 
-void AudioPluginAudioProcessor::loadAudioFromMemory(const void *data,
-                                                    int sizeInBytes) {
-  // JUCE 7+ requires unique_ptr ownership transfer for createReaderFor
-  auto stream = std::make_unique<juce::MemoryInputStream>(
-      data, (size_t)sizeInBytes, false);
-  auto reader = audioFormatManager.createReaderFor(std::move(stream));
+void AudioPluginAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
+                                              juce::MidiBuffer& midiMessages) {
+    juce::ScopedNoDenormals noDenormals;
+    juce::ignoreUnused(midiMessages);
 
-  if (reader != nullptr) {
-    readerSource =
-        std::make_unique<juce::AudioFormatReaderSource>(reader, true);
-    transportSource->setSource(readerSource.get(), 0, nullptr,
-                               reader->sampleRate, 2);
-    if (currentSampleRate > 0.0)
-      transportSource->prepareToPlay(512, currentSampleRate);
-    juce::Logger::getCurrentLogger()->writeToLog(
-        "Audio loaded from binary data - OK");
-  } else {
-    // stream is already deleted by unique_ptr if createReaderFor failed
-    juce::Logger::getCurrentLogger()->writeToLog(
-        "Failed to decode audio from binary data");
-  }
+    auto totalNumOutputChannels = getTotalNumOutputChannels();
+    for (auto i = getTotalNumInputChannels(); i < totalNumOutputChannels; ++i)
+        buffer.clear(i, 0, buffer.getNumSamples());
+
+    // Save dry signal for mixing later
+    dryWetMixer.saveDry(buffer);
+
+    // --- Signal chain ---
+    // 1. Input filter
+    inputFilter.process(buffer);
+
+    // 2. Predelay
+    predelayModule.setDelayMs(apvts.getRawParameterValue(PluginParamIDs::predelay.getParamID())->load());
+    predelayModule.process(buffer);
+
+    // 3. Early reflections (additive)
+    earlyReflections.setEnabled(apvts.getRawParameterValue(erEnabled.getParamID())->load() > 0.5f);
+    earlyReflections.process(buffer);
+
+    // 4. FDN reverb (replaces signal with reverb output)
+    bool isFrozen = apvts.getRawParameterValue(PluginParamIDs::freeze.getParamID())->load() > 0.5f;
+    fdnReverb.setFrozen(isFrozen);
+    fdnReverb.setDecayMs(apvts.getRawParameterValue(decay.getParamID())->load());
+    fdnReverb.setDiffusion(apvts.getRawParameterValue(diffusion.getParamID())->load());
+    fdnReverb.process(buffer);
+
+    // 5. Apply reflect and diffuse gains
+    float rGain = juce::Decibels::decibelsToGain(
+        apvts.getRawParameterValue(reflectGain.getParamID())->load());
+    float dGain = juce::Decibels::decibelsToGain(
+        apvts.getRawParameterValue(diffuseGain.getParamID())->load());
+    buffer.applyGain(rGain * dGain);
+
+    // 6. Chorus
+    chorusModule.setAmount(apvts.getRawParameterValue(chorusAmount.getParamID())->load());
+    chorusModule.process(buffer);
+
+    // 7. Stereo widener
+    stereoWidener.setWidth(apvts.getRawParameterValue(stereo.getParamID())->load());
+    stereoWidener.process(buffer);
+
+    // 8. Dry/wet mix
+    dryWetMixer.setMix(apvts.getRawParameterValue(dryWet.getParamID())->load() / 100.0f);
+    dryWetMixer.mixToOutput(buffer);
 }
 
-void AudioPluginAudioProcessor::playAudio() {
-  if (readerSource != nullptr) {
-    transportSource->start();
-    isPlaying = true;
-    juce::Logger::getCurrentLogger()->writeToLog("Playing audio");
-  } else {
-    juce::Logger::getCurrentLogger()->writeToLog("No audio file loaded");
-  }
-}
-
-void AudioPluginAudioProcessor::stopAudio() {
-  transportSource->stop();
-  transportSource->setPosition(0.0);
-  isPlaying = false;
-  juce::Logger::getCurrentLogger()->writeToLog("Stopped audio");
-}
-
-//==============================================================================
 bool AudioPluginAudioProcessor::hasEditor() const { return true; }
 
-juce::AudioProcessorEditor *AudioPluginAudioProcessor::createEditor() {
-  return new AudioPluginAudioProcessorEditor(*this);
+juce::AudioProcessorEditor* AudioPluginAudioProcessor::createEditor() {
+    return new AudioPluginAudioProcessorEditor(*this);
 }
 
-//==============================================================================
-void AudioPluginAudioProcessor::getStateInformation(
-    juce::MemoryBlock &destData) {
-  auto state = apvts.copyState();
-  std::unique_ptr<juce::XmlElement> xml(state.createXml());
-  copyXmlToBinary(*xml, destData);
+void AudioPluginAudioProcessor::getStateInformation(juce::MemoryBlock& destData) {
+    auto state = apvts.copyState();
+    std::unique_ptr<juce::XmlElement> xml(state.createXml());
+    copyXmlToBinary(*xml, destData);
 }
 
-void AudioPluginAudioProcessor::setStateInformation(const void *data,
-                                                    int sizeInBytes) {
-  std::unique_ptr<juce::XmlElement> xmlState(
-      getXmlFromBinary(data, sizeInBytes));
-  if (xmlState.get() != nullptr)
-    if (xmlState->hasTagName(apvts.state.getType()))
-      apvts.replaceState(juce::ValueTree::fromXml(*xmlState));
+void AudioPluginAudioProcessor::setStateInformation(const void* data, int sizeInBytes) {
+    std::unique_ptr<juce::XmlElement> xmlState(getXmlFromBinary(data, sizeInBytes));
+    if (xmlState && xmlState->hasTagName(apvts.state.getType()))
+        apvts.replaceState(juce::ValueTree::fromXml(*xmlState));
 }
 
-//==============================================================================
-juce::AudioProcessor *JUCE_CALLTYPE createPluginFilter() {
-  return new AudioPluginAudioProcessor();
+juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() {
+    return new AudioPluginAudioProcessor();
 }

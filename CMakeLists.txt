@@ -1,6 +1,6 @@
-cmake_minimum_required(VERSION 3.22) # Recommended for JUCE 8
+cmake_minimum_required(VERSION 3.22)
 
-project(AudioPlugin02 VERSION 0.2.0)
+project(AudioPlugin02 VERSION 0.3.0)
 
 # ============================================================
 # C++ Standard
@@ -10,7 +10,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # ============================================================
-# JUCE - FetchContent (Managed Download)
+# JUCE - FetchContent
 # ============================================================
 
 include(FetchContent)
@@ -32,24 +32,23 @@ juce_add_plugin(AudioPlugin02
     COMPANY_NAME "YourCompany"
     PLUGIN_MANUFACTURER_CODE Ycmp
     PLUGIN_CODE Ap02
-    FORMATS Standalone # VST3 AU
+    FORMATS Standalone VST3 AU
     PRODUCT_NAME "Audio Plugin 02"
 
     IS_SYNTH FALSE
-    NEEDS_MIDI_INPUT FALSE
+    NEEDS_MIDI_INPUT TRUE
     NEEDS_MIDI_OUTPUT FALSE
     IS_MIDI_EFFECT FALSE
     EDITOR_WANTS_KEYBOARD_FOCUS FALSE
 
     NEEDS_JUCE_CORE TRUE
-    NEEDS_JUCE_AUDIO_FORMATS TRUE
     NEEDS_JUCE_AUDIO_PROCESSORS TRUE
     NEEDS_JUCE_GUI_BASICS TRUE
     NEEDS_WEB_BROWSER TRUE
 
     COPY_PLUGIN_AFTER_BUILD TRUE
 
-    VST3_CATEGORIES Fx
+    VST3_CATEGORIES Fx Reverb
     AU_MAIN_TYPE kAudioUnitType_Effect
 )
 
@@ -60,18 +59,54 @@ juce_generate_juce_header(AudioPlugin02)
 # ============================================================
 
 target_sources(AudioPlugin02 PRIVATE
+    # Plugin core
     Source/Plugin/PluginEditor.cpp
     Source/Plugin/PluginEditor.h
     Source/Plugin/PluginProcessor.cpp
     Source/Plugin/PluginProcessor.h
     Source/Plugin/WebviewBridge.h
-    Source/DSP/saw.h
-    Source/DSP/saw.cpp
-    Source/DSP/noise.h
-    Source/DSP/noise.cpp
-    Source/DSP/utils.h
+
+    # Parameters
     Source/Parameters/ParameterIDs.h
     Source/Parameters/ParameterLayout.h
+
+    # DSP - Header-only utilities
+    Source/DSP/SmoothedValue.h
+    Source/DSP/LFO.h
+    Source/DSP/DelayLine.h
+    Source/DSP/FeedbackMatrix.h
+    Source/DSP/DiffusionStage.h
+    Source/DSP/Freeze.h
+    Source/DSP/StereoWidener.h
+    Source/DSP/DryWetMixer.h
+
+    # DSP - Filters
+    Source/DSP/InputFilter.h
+    Source/DSP/InputFilter.cpp
+    Source/DSP/CrossoverFilter.h
+    Source/DSP/CrossoverFilter.cpp
+
+    # DSP - Delay-based
+    Source/DSP/Predelay.h
+    Source/DSP/Predelay.cpp
+    Source/DSP/SpinModulator.h
+    Source/DSP/SpinModulator.cpp
+
+    # DSP - Early Reflections
+    Source/DSP/EarlyReflections.h
+    Source/DSP/EarlyReflections.cpp
+
+    # DSP - Diffusion
+    Source/DSP/DiffusionNetwork.h
+    Source/DSP/DiffusionNetwork.cpp
+
+    # DSP - FDN Core
+    Source/DSP/FDNReverb.h
+    Source/DSP/FDNReverb.cpp
+
+    # DSP - Modulation
+    Source/DSP/Chorus.h
+    Source/DSP/Chorus.cpp
 )
 
 target_include_directories(AudioPlugin02 PRIVATE
@@ -81,23 +116,20 @@ target_include_directories(AudioPlugin02 PRIVATE
 )
 
 # ============================================================
-# Svelte Build Logic (Fixed for BinaryData)
+# Svelte Build Logic
 # ============================================================
 
-# This ensures the directory exists so CMake doesn't complain during configuration
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/WebUI/dist")
 
-# Create a dummy index.html if it doesn't exist, just to satisfy the initial check
 if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/WebUI/dist/index.html")
     file(WRITE "${CMAKE_CURRENT_SOURCE_DIR}/WebUI/dist/index.html" "<html><body>Loading...</body></html>")
 endif()
 
-# Force the build to run during the build phase
 add_custom_target(BuildSvelteUI ALL
     COMMAND npm install
     COMMAND npm run build
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/WebUI"
-    COMMENT "Installing dependencies and building Svelte frontend..."
+    COMMENT "Building Svelte frontend..."
     VERBATIM
 )
 
@@ -108,10 +140,8 @@ add_custom_target(BuildSvelteUI ALL
 juce_add_binary_data(AudioPlugin02_Resources
     SOURCES
         WebUI/dist/index.html
-        Source/Audio/this-is-a-test1.wav
 )
 
-# Crucial: Make the resources wait for the UI build to finish
 add_dependencies(AudioPlugin02_Resources BuildSvelteUI)
 
 # ============================================================
@@ -135,8 +165,6 @@ endif()
 target_link_libraries(AudioPlugin02 PRIVATE
     AudioPlugin02_Resources
     juce::juce_audio_utils
-    juce::juce_audio_formats
-    juce::juce_audio_devices
     juce::juce_audio_processors
     juce::juce_gui_basics
     juce::juce_gui_extra

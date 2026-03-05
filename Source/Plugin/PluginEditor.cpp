@@ -1,150 +1,121 @@
-// PluginEditor.cpp
 #include "PluginEditor.h"
 #include "ParameterIDs.h"
-#include "PluginProcessor.h"
 
-//==============================================================================
-AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor(
-    AudioPluginAudioProcessor &p)
-    : AudioProcessorEditor(&p), processorRef(p) {
+AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor(AudioPluginAudioProcessor& p)
+    : AudioProcessorEditor(&p), processorRef(p)
+{
+    webView = std::make_unique<WebViewBridge>();
+    addAndMakeVisible(webView.get());
 
-  // 1. Initialize the component FIRST
-  webView = std::make_unique<WebViewBridge>();
+    // Route parameter changes from JS to APVTS
+    webView->setParameterCallback([this](const juce::String& paramId, float value) {
+        onParameterChangedFromJS(paramId, value);
+    });
 
-  // 2. Set up its properties
-  addAndMakeVisible(webView.get());
+    setSize(900, 560);
 
-  webView->setParameterCallback(
-      [this](const juce::String &paramName, float value) {
-        onParameterChangedFromJS(paramName, value);
-      });
+    // Unpack HTML from binary data to a temp dir and load
+    auto tempDir = juce::File::getSpecialLocation(juce::File::tempDirectory)
+                       .getChildFile("AudioPlugin02_" +
+                                     juce::String(juce::Time::currentTimeMillis()));
+    tempDir.createDirectory();
 
-  // Set up audio playback callbacks
-  webView->setPlayCallback([this]() {
-    juce::File audioFile = juce::File::getCurrentWorkingDirectory()
-                               .getChildFile("Source")
-                               .getChildFile("Audio")
-                               .getChildFile("this-is-a-test1.wav");
+    auto htmlFile = tempDir.getChildFile("index.html");
+    htmlFile.replaceWithData(BinaryData::index_html, BinaryData::index_htmlSize);
 
-    processorRef.loadAudioFile(audioFile);
-    processorRef.playAudio();
-  });
+    webView->goToURL("file://" + htmlFile.getFullPathName());
 
-  webView->setStopCallback([this]() { processorRef.stopAudio(); });
-
-  webView->setPauseCallback([this]() { processorRef.stopAudio(); });
-
-  webView->setResumeCallback([this]() { processorRef.playAudio(); });
-
-  // 3. ONLY THEN call setSize (which triggers resized())
-  setSize(750, 500);
-
-  // 4. Load your HTML/initial values after the UI is ready
-  // Robust method: Extract BinaryData to a temp folder to avoid bundle path
-  // issues
-
-  auto tempDir =
-      juce::File::getSpecialLocation(juce::File::tempDirectory)
-          .getChildFile("AudioPlugin02_Resources_" +
-                        juce::String(juce::Time::currentTimeMillis()));
-
-  tempDir.createDirectory();
-
-  // Helper to write binary data to file - explicitly using 'BinaryData::'
-  // namespace
-  auto unpackFile = [&](const char *data, int size,
-                        const juce::String &filename) {
-    auto file = tempDir.getChildFile(filename);
-    file.replaceWithData(data, size);
-    return file;
-  };
-
-  auto htmlFile = unpackFile(BinaryData::index_html, BinaryData::index_htmlSize,
-                             "index.html");
-
-  webView->goToURL("file://" + htmlFile.getFullPathName());
-
-  startTimerHz(60);
-  sendGainToJS(processorRef.apvts
-                   .getRawParameterValue(PluginParamIDs::gain.getParamID())
-                   ->load());
+    startTimerHz(30);
+    sendAllParamsToJS();
 }
 
 AudioPluginAudioProcessorEditor::~AudioPluginAudioProcessorEditor() {
-  stopTimer();
+    stopTimer();
 }
 
-//==============================================================================
-void AudioPluginAudioProcessorEditor::paint(juce::Graphics &g) {
-  // WebView will handle all rendering
-  g.fillAll(juce::Colour(0xff1e1e1e));
+void AudioPluginAudioProcessorEditor::paint(juce::Graphics& g) {
+    g.fillAll(juce::Colour(0xffede6da));
 }
 
-//==============================================================================
 void AudioPluginAudioProcessorEditor::resized() {
-  // Only set bounds if the pointer actually exists!
-  if (webView != nullptr) {
-    webView->setBounds(getLocalBounds());
-  }
+    if (webView != nullptr)
+        webView->setBounds(getLocalBounds());
 }
-//==============================================================================
+
 void AudioPluginAudioProcessorEditor::timerCallback() {
-  // Poll for parameter changes and send to JavaScript
-  float currentGain =
-      processorRef.apvts
-          .getRawParameterValue(PluginParamIDs::gain.getParamID())
-          ->load();
+    // Poll each parameter and send to JS if changed
+    auto& apvts = processorRef.apvts;
 
-  if (std::abs(currentGain - lastGainValue) > 0.01f) {
-    lastGainValue = currentGain;
-    sendGainToJS(currentGain);
-  }
+    auto sendIfChanged = [&](const juce::String& paramId) {
+        auto* param = apvts.getParameter(paramId);
+        if (!param) return;
+        float normalized = param->getValue(); // 0-1
+        auto key = paramId.toStdString();
+        auto it = lastParamValues.find(key);
+        if (it == lastParamValues.end() || std::abs(it->second - normalized) > 0.001f) {
+            lastParamValues[key] = normalized;
+            sendParamToJS(paramId, normalized);
+        }
+    };
+
+    using namespace PluginParamIDs;
+    sendIfChanged(loCutEnabled.getParamID()); sendIfChanged(hiCutEnabled.getParamID());
+    sendIfChanged(loCutFreq.getParamID());    sendIfChanged(hiCutFreq.getParamID());
+    sendIfChanged(erEnabled.getParamID());    sendIfChanged(erAmount.getParamID());
+    sendIfChanged(erRate.getParamID());       sendIfChanged(erShape.getParamID());
+    sendIfChanged(reverbMode.getParamID());   sendIfChanged(crossoverFreq.getParamID());
+    sendIfChanged(diffusion.getParamID());    sendIfChanged(scale.getParamID());
+    sendIfChanged(decay.getParamID());        sendIfChanged(damping.getParamID());
+    sendIfChanged(feedback.getParamID());
+    sendIfChanged(chorusAmount.getParamID()); sendIfChanged(chorusRate.getParamID());
+    sendIfChanged(reflectGain.getParamID());  sendIfChanged(diffuseGain.getParamID());
+    sendIfChanged(dryWet.getParamID());
+    sendIfChanged(predelay.getParamID());     sendIfChanged(smooth.getParamID());
+    sendIfChanged(size.getParamID());         sendIfChanged(freeze.getParamID());
+    sendIfChanged(flatCut.getParamID());      sendIfChanged(stereo.getParamID());
+    sendIfChanged(density.getParamID());
 }
 
-//==============================================================================
-void AudioPluginAudioProcessorEditor::onParameterChangedFromJS(
-    const juce::String &paramName, float value) {
-  // Update the parameter in the processor
-  if (paramName == PluginParamIDs::gain.getParamID()) {
-    auto *param =
-        processorRef.apvts.getParameter(PluginParamIDs::gain.getParamID());
+void AudioPluginAudioProcessorEditor::sendAllParamsToJS() {
+    auto& apvts = processorRef.apvts;
+    auto sendAll = [&](const juce::String& paramId) {
+        auto* param = apvts.getParameter(paramId);
+        if (!param) return;
+        float normalized = param->getValue();
+        lastParamValues[paramId.toStdString()] = normalized;
+        sendParamToJS(paramId, normalized);
+    };
 
+    using namespace PluginParamIDs;
+    sendAll(loCutEnabled.getParamID()); sendAll(hiCutEnabled.getParamID());
+    sendAll(loCutFreq.getParamID());    sendAll(hiCutFreq.getParamID());
+    sendAll(erEnabled.getParamID());    sendAll(erAmount.getParamID());
+    sendAll(erRate.getParamID());       sendAll(erShape.getParamID());
+    sendAll(reverbMode.getParamID());   sendAll(crossoverFreq.getParamID());
+    sendAll(diffusion.getParamID());    sendAll(scale.getParamID());
+    sendAll(decay.getParamID());        sendAll(damping.getParamID());
+    sendAll(feedback.getParamID());
+    sendAll(chorusAmount.getParamID()); sendAll(chorusRate.getParamID());
+    sendAll(reflectGain.getParamID());  sendAll(diffuseGain.getParamID());
+    sendAll(dryWet.getParamID());
+    sendAll(predelay.getParamID());     sendAll(smooth.getParamID());
+    sendAll(size.getParamID());         sendAll(freeze.getParamID());
+    sendAll(flatCut.getParamID());      sendAll(stereo.getParamID());
+    sendAll(density.getParamID());
+}
+
+void AudioPluginAudioProcessorEditor::sendParamToJS(const juce::String& paramId,
+                                                     float normalizedValue) {
+    juce::String js = "if (window.setParameterValue) { window.setParameterValue('"
+                      + paramId + "', " + juce::String(normalizedValue) + "); }";
+    webView->evaluateJavascript(js);
+}
+
+void AudioPluginAudioProcessorEditor::onParameterChangedFromJS(const juce::String& paramId,
+                                                                float value) {
+    auto* param = processorRef.apvts.getParameter(paramId);
     if (param != nullptr) {
-      // Normalize the value to 0-1 range for JUCE parameter
-      float normalizedValue = juce::jmap(value, -60.0f, 0.0f, 0.0f, 1.0f);
-      param->setValueNotifyingHost(normalizedValue);
-      lastGainValue = value; // Update cached value to prevent feedback loop
+        param->setValueNotifyingHost(value); // value is 0-1 normalized
+        lastParamValues[paramId.toStdString()] = value;
     }
-  }
-
-  // --- Handle play/stop from JS ---
-  if (paramName == PluginParamIDs::playing.getParamID()) {
-    auto *param =
-        processorRef.apvts.getParameter(PluginParamIDs::playing.getParamID());
-    if (param != nullptr)
-      param->setValueNotifyingHost(value); // sync APVTS (0.0 or 1.0)
-
-    if (value > 0.5f) {
-      // Load from embedded binary data (compiled in from
-      // Source/Audio/this-is-a-test1.wav)
-      processorRef.loadAudioFromMemory(BinaryData::thisisatest1_wav,
-                                       BinaryData::thisisatest1_wavSize);
-      processorRef.playAudio();
-    } else {
-      processorRef.stopAudio();
-    }
-  }
-}
-
-//==============================================================================
-void AudioPluginAudioProcessorEditor::sendGainToJS(float gainDb) {
-  // Convert gain from dB (-60 to 0) to percentage (0 to 100)
-  float percentage = juce::jmap(gainDb, -60.0f, 0.0f, 0.0f, 100.0f);
-
-  // Functions that comes from the bridge.ts file
-  juce::String jsCode =
-      "if (window.setParameterValue) { window.setParameterValue('gain', " +
-      juce::String(percentage) + "); }";
-
-  webView->evaluateJavascript(jsCode);
 }

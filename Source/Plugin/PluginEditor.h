@@ -4,29 +4,32 @@
 #include "WebviewBridge.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <unordered_map>
+#include <string>
 
 class AudioPluginAudioProcessorEditor : public juce::AudioProcessorEditor,
                                         private juce::Timer {
 public:
-  explicit AudioPluginAudioProcessorEditor(AudioPluginAudioProcessor &);
-  ~AudioPluginAudioProcessorEditor() override;
+    explicit AudioPluginAudioProcessorEditor(AudioPluginAudioProcessor&);
+    ~AudioPluginAudioProcessorEditor() override;
 
-  void paint(juce::Graphics &) override;
-  void resized() override;
-  void timerCallback() override;
+    void paint(juce::Graphics&) override;
+    void resized() override;
+    void timerCallback() override;
 
 private:
-  AudioPluginAudioProcessor &processorRef;
+    AudioPluginAudioProcessor& processorRef;
+    std::unique_ptr<WebViewBridge> webView;
 
-  std::unique_ptr<WebViewBridge> webView;
+    // Handle parameter change from JS → C++
+    void onParameterChangedFromJS(const juce::String& paramId, float value);
 
-  // Handle parameter changes from JavaScript
-  void onParameterChangedFromJS(const juce::String &paramName, float value);
+    // Send all parameters to JS (on init or timer)
+    void sendAllParamsToJS();
+    void sendParamToJS(const juce::String& paramId, float normalizedValue);
 
-  // Send parameter updates to JavaScript
-  void sendGainToJS(float gainValue);
+    // Snapshot of last sent values to detect changes
+    std::unordered_map<std::string, float> lastParamValues;
 
-  float lastGainValue = -60.0f;
-
-  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AudioPluginAudioProcessorEditor)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AudioPluginAudioProcessorEditor)
 };
