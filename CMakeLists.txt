@@ -1,143 +1,192 @@
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.22)
 
-# Project name and version
-project(WebViewPlugin VERSION 1.0.0)
+project(AudioPlugin02 VERSION 0.3.0)
 
-# Set C++ standard
+# ============================================================
+# C++ Standard
+# ============================================================
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Add JUCE from local directory
-# Assuming JUCE folder is in the same directory as this CMakeLists.txt
-add_subdirectory(JUCE)
+# ============================================================
+# JUCE - FetchContent
+# ============================================================
 
-# Add the plugin target
-juce_add_plugin(WebViewPlugin
-    # Basic plugin settings
-    COMPANY_NAME "YourCompany"                      # Change this to your company name
-    PLUGIN_MANUFACTURER_CODE Yoco                   # 4 characters, at least one uppercase
-    PLUGIN_CODE Wvpl                                # 4 characters, at least one uppercase
-    
-    # Plugin formats to build
-    FORMATS AU VST3 Standalone
-    
-    # Product name (displayed in DAW)
-    PRODUCT_NAME "WebView Filter"
-    
-    # Plugin characteristics
+include(FetchContent)
+
+FetchContent_Declare(
+    JUCE
+    GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
+    GIT_TAG 8.0.4
+    GIT_SHALLOW TRUE
+)
+
+FetchContent_MakeAvailable(JUCE)
+
+# ============================================================
+# Plugin Definition
+# ============================================================
+
+juce_add_plugin(AudioPlugin02
+    COMPANY_NAME "YourCompany"
+    PLUGIN_MANUFACTURER_CODE Ycmp
+    PLUGIN_CODE Ap02
+    FORMATS Standalone VST3 AU
+    PRODUCT_NAME "Audio Plugin 02"
+
     IS_SYNTH FALSE
-    NEEDS_MIDI_INPUT FALSE
+    NEEDS_MIDI_INPUT TRUE
     NEEDS_MIDI_OUTPUT FALSE
     IS_MIDI_EFFECT FALSE
-    EDITOR_WANTS_KEYBOARD_FOCUS TRUE
-    
-    # Copy plugin after build
+    EDITOR_WANTS_KEYBOARD_FOCUS FALSE
+
+    NEEDS_JUCE_CORE TRUE
+    NEEDS_JUCE_AUDIO_PROCESSORS TRUE
+    NEEDS_JUCE_GUI_BASICS TRUE
+    NEEDS_WEB_BROWSER TRUE
+
     COPY_PLUGIN_AFTER_BUILD TRUE
-    
-    # VST3 settings
-    VST3_CATEGORIES Fx Filter
-    
-    # AU settings (macOS only)
+
+    VST3_CATEGORIES Fx Reverb
     AU_MAIN_TYPE kAudioUnitType_Effect
-    
-    # Standalone settings
-    PLUGIN_NAME "WebView Filter"
-    PLUGIN_DESCRIPTION "Audio filter plugin with WebView interface"
 )
 
-# Add source files AFTER juce_add_plugin
-target_sources(WebViewPlugin
-    PRIVATE
-        PluginProcessor.cpp
-        PluginEditor.cpp
-        PluginProcessor.h
-        PluginEditor.h
-        noise.cpp
-        pulse.cpp
-        saw.cpp
-        KarplusStrong.cpp
+juce_generate_juce_header(AudioPlugin02)
+
+# ============================================================
+# Source Files
+# ============================================================
+
+target_sources(AudioPlugin02 PRIVATE
+    # Plugin core
+    Source/Plugin/PluginEditor.cpp
+    Source/Plugin/PluginEditor.h
+    Source/Plugin/PluginProcessor.cpp
+    Source/Plugin/PluginProcessor.h
+    Source/Plugin/WebviewBridge.h
+
+    # Parameters
+    Source/Parameters/ParameterIDs.h
+    Source/Parameters/ParameterLayout.h
+
+    # DSP - Header-only utilities
+    Source/DSP/SmoothedValue.h
+    Source/DSP/LFO.h
+    Source/DSP/DelayLine.h
+    Source/DSP/FeedbackMatrix.h
+    Source/DSP/DiffusionStage.h
+    Source/DSP/Freeze.h
+    Source/DSP/StereoWidener.h
+    Source/DSP/DryWetMixer.h
+
+    # DSP - Filters
+    Source/DSP/InputFilter.h
+    Source/DSP/InputFilter.cpp
+    Source/DSP/CrossoverFilter.h
+    Source/DSP/CrossoverFilter.cpp
+
+    # DSP - Delay-based
+    Source/DSP/Predelay.h
+    Source/DSP/Predelay.cpp
+    Source/DSP/SpinModulator.h
+    Source/DSP/SpinModulator.cpp
+
+    # DSP - Early Reflections
+    Source/DSP/EarlyReflections.h
+    Source/DSP/EarlyReflections.cpp
+
+    # DSP - Diffusion
+    Source/DSP/DiffusionNetwork.h
+    Source/DSP/DiffusionNetwork.cpp
+
+    # DSP - FDN Core
+    Source/DSP/FDNReverb.h
+    Source/DSP/FDNReverb.cpp
+
+    # DSP - Modulation
+    Source/DSP/Chorus.h
+    Source/DSP/Chorus.cpp
 )
 
-# Include Resources directory for the .h files
-target_include_directories(WebViewPlugin
-    PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}
-        ${CMAKE_CURRENT_SOURCE_DIR}/Resources
+target_include_directories(AudioPlugin02 PRIVATE
+    Source/Plugin
+    Source/DSP
+    Source/Parameters
 )
 
-# Preprocessor definitions
-target_compile_definitions(WebViewPlugin
-    PUBLIC
-        # JUCE settings
-        JUCE_WEB_BROWSER=1
-        JUCE_USE_CURL=0
-        JUCE_VST3_CAN_REPLACE_VST2=0
-        
-        # Enable WebView2 on Windows with static linking
-        JUCE_USE_WIN_WEBVIEW2_WITH_STATIC_LINKING=1
-        
-        # Display splash screen (set to 0 if you have a JUCE license)
-        JUCE_DISPLAY_SPLASH_SCREEN=1
+# ============================================================
+# Svelte Build Logic
+# ============================================================
+
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/WebUI/dist")
+
+if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/WebUI/dist/index.html")
+    file(WRITE "${CMAKE_CURRENT_SOURCE_DIR}/WebUI/dist/index.html" "<html><body>Loading...</body></html>")
+endif()
+
+add_custom_target(BuildSvelteUI ALL
+    COMMAND npm install
+    COMMAND npm run build
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/WebUI"
+    COMMENT "Building Svelte frontend..."
+    VERBATIM
 )
 
-# Link JUCE modules - DO THIS BEFORE target_link_libraries with juce::juce_recommended_*
-target_link_libraries(WebViewPlugin
-    PRIVATE
-        # JUCE modules required for audio plugin
-        juce::juce_audio_basics
-        juce::juce_audio_devices
-        juce::juce_audio_formats
-        juce::juce_audio_plugin_client
-        juce::juce_audio_processors
-        juce::juce_audio_utils
-        juce::juce_core
-        juce::juce_data_structures
-        juce::juce_dsp
-        juce::juce_events
-        juce::juce_graphics
-        juce::juce_gui_basics
-        juce::juce_gui_extra              # Required for WebBrowserComponent
+# ============================================================
+# Embed Web Resources Into Binary
+# ============================================================
+
+juce_add_binary_data(AudioPlugin02_Resources
+    SOURCES
+        WebUI/dist/index.html
 )
 
-# Add recommended flags AFTER all JUCE modules
-target_link_libraries(WebViewPlugin
-    PUBLIC
-        juce::juce_recommended_config_flags
-        juce::juce_recommended_lto_flags
-        juce::juce_recommended_warning_flags
+add_dependencies(AudioPlugin02_Resources BuildSvelteUI)
+
+# ============================================================
+# Compile Definitions & Linking
+# ============================================================
+
+target_compile_definitions(AudioPlugin02 PUBLIC
+    JUCE_WEB_BROWSER=1
+    JUCE_USE_CURL=0
+    JUCE_VST3_CAN_REPLACE_VST2=0
+    JUCE_DISPLAY_SPLASH_SCREEN=0
+    JUCE_REPORT_APP_USAGE=0
 )
 
-# Platform-specific settings
 if(APPLE)
-    # macOS specific settings
-    target_compile_definitions(WebViewPlugin
-        PRIVATE
-            JUCE_SILENCE_XCODE_15_LINKER_WARNING=1
-    )
-    
-    # Set minimum macOS version (adjust as needed)
-    set_target_properties(WebViewPlugin PROPERTIES
-        XCODE_ATTRIBUTE_MACOSX_DEPLOYMENT_TARGET "10.13"
+    target_compile_options(AudioPlugin02 PRIVATE
+        -Wno-deprecated-declarations
     )
 endif()
 
-if(WIN32)
-    # Windows specific settings
-    target_compile_definitions(WebViewPlugin
-        PRIVATE
-            JUCE_USE_WINRT_MIDI=1
-    )
-endif()
-
-if(UNIX AND NOT APPLE)
-    # Linux specific settings
-    # Add any Linux-specific settings here if needed
-endif()
-
-# Copy Resources folder to build directory
-add_custom_command(TARGET WebViewPlugin POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        ${CMAKE_CURRENT_SOURCE_DIR}/Resources
-        $<TARGET_FILE_DIR:WebViewPlugin>/Resources
-    COMMENT "Copying Resources folder to build directory"
+target_link_libraries(AudioPlugin02 PRIVATE
+    AudioPlugin02_Resources
+    juce::juce_audio_utils
+    juce::juce_audio_processors
+    juce::juce_gui_basics
+    juce::juce_gui_extra
+PUBLIC
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_lto_flags
+    juce::juce_recommended_warning_flags
 )
+
+# ============================================================
+# Copy Resources to Bundle (Post-Build)
+# ============================================================
+
+macro(copy_resources_to_target target_name)
+    if(TARGET ${target_name})
+        add_custom_command(TARGET ${target_name} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${CMAKE_CURRENT_SOURCE_DIR}/WebUI/dist"
+                "$<TARGET_FILE_DIR:${target_name}>/../Resources"
+        )
+    endif()
+endmacro()
+
+copy_resources_to_target(AudioPlugin02)
+copy_resources_to_target(AudioPlugin02_Standalone)

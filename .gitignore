@@ -1,7 +1,12 @@
+echo "!Source/Audio/this-is-a-test1.wav" >> .gitignore
+
+
 # Build directories
 build/
 cmake-build-*/
 Builds/
+WebUI/dist
+WebUI/node_modules
 
 # IDE files
 .vscode/
@@ -25,3 +30,8 @@ Thumbs.db
 *.vst3
 *.component
 *.aaxplugin
+
+# Documentation
+*.md
+/docs
+
