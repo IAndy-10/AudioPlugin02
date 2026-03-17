@@ -60,12 +60,14 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout
         juce::NormalisableRange<float>(0.0f, 1.0f), 0.75f));
 
     // ---- Chorus ----
+    // chorusAmount range corrected from 0–1 to 0.01–4.0 (Step 02 preliminary fix).
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         chorusAmount, "Chorus Amount",
-        juce::NormalisableRange<float>(0.0f, 1.0f), 0.2f));
+        juce::NormalisableRange<float>(0.01f, 4.0f, 0.01f), 0.2f));
+    // chorusRate range corrected from 0.1–10 Hz to 0.01–8.0 Hz (Step 02 preliminary fix).
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         chorusRate, "Chorus Rate",
-        juce::NormalisableRange<float>(0.1f, 10.0f, 0.01f, 0.5f), 1.5f));
+        juce::NormalisableRange<float>(0.01f, 8.0f, 0.01f, 0.5f), 1.5f));
 
     // ---- Output ----
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
