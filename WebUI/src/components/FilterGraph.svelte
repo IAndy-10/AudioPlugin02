@@ -3,10 +3,11 @@
   import NeuNumber from './NeuNumber.svelte';
   import NeuButton from './NeuButton.svelte';
 
-  export let freq   = 1000;   // center frequency, Hz (20–20000)
-  export let q      = 1.0;    // Q factor (0.1–20)
-  export let loCut  = false;  // high-pass toggle
-  export let hiCut  = false;  // low-pass toggle
+  export let freq   = 1000;        // center frequency, Hz (50–18000)
+  export let q      = 1.0;         // Q factor (0.5–9.0)
+  export let loCut  = false;       // high-pass toggle
+  export let hiCut  = false;       // low-pass toggle
+  export let highFilterType = false; // false = LP, true = Shelf
 
   const dispatch = createEventDispatcher();
 
@@ -14,7 +15,7 @@
   const CW = 300, CH = 110;
   const MX = 6, MY = 8;             // x / y margins
   const FMIN = 50, FMAX = 18000;
-  const QMIN = 0.1, QMAX = 9.0;
+  const QMIN = 0.5, QMAX = 9.0;
   const LOCUT_FC = 100;             // fixed Lo Cut corner (Hz)
   const HICUT_FC = 8000;            // fixed Hi Cut corner (Hz)
   const DB_TOP   = 6;               // +6 dB headroom at canvas top
@@ -32,8 +33,6 @@
   }
 
   // ── Magnitude → canvas-Y (dB scale) ──────────────────────
-  // 0 dB (mag=1) sits near the top; +6 dB at the very top to
-  // leave headroom for the LP resonance bump.
   function magToY(mag) {
     const db = 20 * Math.log10(Math.max(mag, 1e-6));
     const clamped = Math.max(DB_BOT, Math.min(DB_TOP, db));
@@ -41,8 +40,6 @@
   }
 
   // ── Q ↔ canvas-Y (log scale) ──────────────────────────────
-  // High Q (narrow peak) → small Y (near top)
-  // Low  Q (wide peak)   → large Y (near bottom)
   function qToY(qv) {
     const norm = (Math.log(qv) - Math.log(QMIN)) / (Math.log(QMAX) - Math.log(QMIN));
     return MY + (1 - norm) * (CH - 2 * MY);
@@ -58,12 +55,10 @@
     return 1 / Math.sqrt(1 + q * q * (r - 1 / r) * (r - 1 / r));
   }
   function hpMag(f) {
-    // 2nd-order Butterworth high-pass
     const r = f / LOCUT_FC;
     return (r * r) / Math.sqrt(1 + r * r * r * r);
   }
   function lpMag(f) {
-    // 2nd-order low-pass with Q-dependent resonance
     const r = f / HICUT_FC;
     return 1 / Math.sqrt((1 - r*r)*(1 - r*r) + (r/q)*(r/q));
   }
@@ -73,11 +68,9 @@
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
 
-    // Background
     ctx.fillStyle = '#1a1a1a';
     ctx.fillRect(0, 0, CW, CH);
 
-    // Subtle grid — vertical lines at decade/half-decade freqs
     ctx.lineWidth = 0.5;
     ctx.strokeStyle = 'rgba(255,255,255,0.06)';
     for (const gf of [50, 100, 200, 500, 1000, 2000, 5000, 10000]) {
@@ -87,15 +80,12 @@
       ctx.lineTo(gx, CH);
       ctx.stroke();
     }
-    // Horizontal centre line (≈ −21 dB reference)
     ctx.strokeStyle = 'rgba(255,255,255,0.04)';
     ctx.beginPath();
     ctx.moveTo(0, CH / 2);
     ctx.lineTo(CW, CH / 2);
     ctx.stroke();
 
-    // ── Frequency response curve ─────────────────────────────
-    // Build points
     const pts = [];
     for (let px = 0; px <= CW; px++) {
       const f = xToFreq(px);
@@ -108,7 +98,6 @@
       pts.push([px, magToY(mag)]);
     }
 
-    // Fill
     ctx.beginPath();
     pts.forEach(([px, py], i) => i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py));
     ctx.lineTo(CW, CH);
@@ -117,7 +106,6 @@
     ctx.fillStyle = 'rgba(0,200,180,0.09)';
     ctx.fill();
 
-    // Stroke
     ctx.beginPath();
     pts.forEach(([px, py], i) => i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py));
     ctx.strokeStyle = '#00c8b4';
@@ -127,9 +115,8 @@
 
     // ── Draggable handle ─────────────────────────────────────
     const hx = freqToX(freq);
-    const hy = qToY(q);             // moves with Q: high Q = near top
+    const hy = qToY(q);
 
-    // Dashed vertical from top to handle
     ctx.beginPath();
     ctx.moveTo(hx, MY);
     ctx.lineTo(hx, hy - 6.5);
@@ -137,7 +124,6 @@
     ctx.lineWidth = 0.8;
     ctx.setLineDash([2, 3]);
     ctx.stroke();
-    // Dashed vertical from handle to bottom
     ctx.beginPath();
     ctx.moveTo(hx, hy + 6.5);
     ctx.lineTo(hx, CH - MY);
@@ -145,19 +131,16 @@
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Handle circle
     ctx.beginPath();
     ctx.arc(hx, hy, 5.5, 0, Math.PI * 2);
     ctx.fillStyle = dragging ? '#ffb940' : '#f5a623';
     ctx.fill();
-    // Subtle rim
     ctx.beginPath();
     ctx.arc(hx, hy, 5.5, 0, Math.PI * 2);
     ctx.strokeStyle = 'rgba(255,220,100,0.4)';
     ctx.lineWidth = 1;
     ctx.stroke();
 
-    // Freq label near handle (bottom of canvas)
     const freqLabel = freq >= 1000
       ? (freq / 1000).toFixed(freq % 1000 === 0 ? 0 : 1) + 'k'
       : Math.round(freq).toString();
@@ -165,10 +148,20 @@
     ctx.fillStyle = 'rgba(245,166,35,0.5)';
     ctx.textAlign = 'center';
     ctx.fillText(freqLabel, hx, CH - 1);
+
+    // ── highFilterType indicator (top-right corner) ───────────
+    const modeLabel = highFilterType ? 'SH' : 'LP';
+    ctx.font = 'bold 8px "DM Sans", sans-serif';
+    ctx.fillStyle = highFilterType
+      ? 'rgba(245,180,50,0.65)'
+      : 'rgba(0,200,180,0.45)';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'top';
+    ctx.fillText(modeLabel, CW - MX - 2, MY);
+    ctx.textBaseline = 'alphabetic';
   }
 
-  // Reactive redraw
-  $: if (canvas) { freq; q; loCut; hiCut; draw(); }
+  $: if (canvas) { freq; q; loCut; hiCut; highFilterType; draw(); }
   onMount(() => draw());
 
   // ── Drag logic ────────────────────────────────────────────
@@ -183,7 +176,7 @@
     const mx = (e.clientX - rect.left) * scaleX;
     const my = (e.clientY - rect.top) * scaleY;
     const hx = freqToX(freq);
-    const hy = qToY(q);             // hit-test against actual handle position
+    const hy = qToY(q);
 
     if (Math.hypot(mx - hx, my - hy) < 16) {
       dragging = true;
@@ -202,12 +195,10 @@
     const scaleX = CW / rect.width;
     const scaleY = CH / rect.height;
 
-    // Horizontal → frequency (log scale via canvas coords)
     const startCanvasX = freqToX(dragStartFreq);
     const dx = (e.clientX - dragStartClientX) * scaleX;
     freq = Math.min(FMAX, Math.max(FMIN, xToFreq(startCanvasX + dx)));
 
-    // Vertical → Q (direct canvas-Y → Q mapping)
     const startCanvasY = qToY(dragStartQ);
     const dy = (e.clientY - dragStartClientY) * scaleY;
     q = yToQ(startCanvasY + dy);
@@ -218,7 +209,7 @@
 
   function onDragUp() {
     dragging = false;
-    draw(); // redraw to update handle color
+    draw();
     window.removeEventListener('mousemove', onDragMove);
     window.removeEventListener('mouseup', onDragUp);
   }
@@ -279,8 +270,8 @@
     <NeuNumber
       label="FREQ"
       value={freq}
-      min={20}
-      max={20000}
+      min={50}
+      max={18000}
       step={1}
       unit=" Hz"
       decimals={0}
@@ -289,7 +280,7 @@
     <NeuNumber
       label="Q"
       value={q}
-      min={0.1}
+      min={0.5}
       max={9}
       step={0.01}
       decimals={2}
@@ -302,7 +293,6 @@
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@200;300;400&display=swap');
 
-  /* ── Outer wrapper ────────────────────────────────────── */
   .fg-wrap {
     display: flex;
     flex-direction: column;
@@ -316,7 +306,6 @@
     user-select: none;
   }
 
-  /* ── Header row ───────────────────────────────────────── */
   .fg-header {
     display: flex;
     align-items: center;
@@ -333,13 +322,11 @@
     color: rgba(130, 110, 85, 0.65);
   }
 
-  /* ── Toggle buttons (NeuButton row) ──────────────────── */
   .toggles {
     display: flex;
     gap: 12px;
   }
 
-  /* ── Canvas shell (inset neumorphic recess) ───────────── */
   .canvas-shell {
     border-radius: 10px;
     overflow: hidden;
@@ -362,7 +349,6 @@
     cursor: grabbing;
   }
 
-  /* ── NeuNumber row ────────────────────────────────────── */
   .controls-row {
     display: flex;
     justify-content: center;

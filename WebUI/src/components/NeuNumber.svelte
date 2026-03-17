@@ -29,8 +29,13 @@
   function startEdit() {
     editing = true;
     rawInput = displayVal;
-    // Focus the hidden input on next tick
-    setTimeout(() => inputEl && inputEl.focus(), 0);
+    // Focus and select all existing text so first keystroke replaces it
+    setTimeout(() => {
+      if (inputEl) {
+        inputEl.focus();
+        inputEl.select();
+      }
+    }, 0);
   }
 
   function commitEdit() {

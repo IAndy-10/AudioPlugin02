@@ -54,12 +54,17 @@
     transition: box-shadow 0.14s, background 0.14s;
   }
 
-  .btn:active,
+  /* Momentary press feedback (only when not already toggled on) */
+  .btn:active:not(.active) {
+    background: #e5ddd1;
+  }
+
   .btn.active {
     background: #e2d9cc;
     box-shadow:
       inset 4px 4px 9px rgba(150,130,100,0.35),
       inset -3px -3px 7px rgba(255,250,240,0.75);
+    transition: none;
   }
 
   .icon {

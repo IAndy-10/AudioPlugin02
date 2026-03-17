@@ -6,14 +6,14 @@ export type ParameterId =
     // FDN Core (8)
     | 'reverbMode' | 'crossoverFreq' | 'diffusion' | 'scale'
     | 'decay' | 'damping' | 'feedback' | 'highFilterType'
-    // Chorus (2)
-    | 'chorusAmount' | 'chorusRate'
+    // Chorus (3)
+    | 'chorusEnabled' | 'chorusAmount' | 'chorusRate'
     // Output (3)
     | 'reflectGain' | 'diffuseGain' | 'dryWet'
     // Bottom Utility Row (8)
     | 'predelay' | 'smooth' | 'size' | 'freeze'
     | 'flatEnabled' | 'cutEnabled' | 'stereo' | 'density';
-// Total: 30 unique IDs, matching ParameterIDs.h exactly.
+// Total: 31 unique IDs, matching ParameterIDs.h exactly.
 // Note: the Step 02 spec formula (24 − 1 + 3 = 26) was a miscalculation;
 // the actual pre-Step-01 count was 28, yielding 28 − 1 + 3 = 30.
 

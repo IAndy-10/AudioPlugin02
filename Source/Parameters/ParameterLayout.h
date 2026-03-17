@@ -60,6 +60,7 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout
         juce::NormalisableRange<float>(0.0f, 1.0f), 0.75f));
 
     // ---- Chorus ----
+    params.push_back(std::make_unique<juce::AudioParameterBool>(chorusEnabled, "Chorus Enable", false));
     // chorusAmount range corrected from 0–1 to 0.01–4.0 (Step 02 preliminary fix).
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         chorusAmount, "Chorus Amount",

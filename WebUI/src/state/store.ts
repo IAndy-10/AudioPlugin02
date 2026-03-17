@@ -29,7 +29,7 @@ export const params = {
     highFilterType: writable(0),   // 0 = low-pass, 1 = shelving
 
     // Chorus
-    choEnable:    writable(0),
+    chorusEnabled: writable(0),
     chorusAmount: writable(0.05),  // default 0.2 in range 0.01–4.0 → (0.2-0.01)/3.99 ≈ 0.048
     chorusRate:   writable(0.27),
 

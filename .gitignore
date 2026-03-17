@@ -1,37 +1,49 @@
-echo "!Source/Audio/this-is-a-test1.wav" >> .gitignore
-
-
-# Build directories
+# ── CMake / C++ build ────────────────────────────────────────
 build/
 cmake-build-*/
 Builds/
-WebUI/dist
-WebUI/node_modules
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+_deps/
+*.cbp
 
-# IDE files
+# ── JUCE artefacts ───────────────────────────────────────────
+*_artefacts/
+JuceLibraryCode/
+
+# ── Compiled object files ────────────────────────────────────
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dylib
+
+# ── Plugin binaries ──────────────────────────────────────────
+*.vst3
+*.component
+*.aaxplugin
+*.au
+
+# ── WebUI ─────────────────────────────────────────────────────
+WebUI/node_modules/
+WebUI/dist/
+WebUI/.svelte-kit/
+WebUI/.vite/
+
+# ── OS metadata ──────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+Desktop.ini
+
+# ── Editor / IDE ─────────────────────────────────────────────
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# Compiled files
-*.o
-*.obj
-*.exe
-*.out
-*.app
-
-# Plugin binaries
-*.vst3
-*.component
-*.aaxplugin
-
-# Documentation
-# *.md
-# /docs
-
+*.suo
+*.user

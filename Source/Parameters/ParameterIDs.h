@@ -26,6 +26,7 @@ namespace PluginParamIDs {
     const juce::ParameterID feedback      { "feedback",      1 };
 
     // Chorus
+    const juce::ParameterID chorusEnabled { "chorusEnabled", 1 };
     const juce::ParameterID chorusAmount { "chorusAmount", 1 };
     const juce::ParameterID chorusRate   { "chorusRate",   1 };
 
