@@ -16,7 +16,6 @@
     import NeuKnobDiscrete  from './components/NeuKnobDiscrete.svelte';
 
     const {
-        loCutEnabled, hiCutEnabled, loCutFreq, hiCutFreq, hiCutQ,
         erEnabled, erAmount, erRate, erShape,
         crossoverFreq, diffusion, scale, decay, damping, feedback,
         highFilterType,
@@ -41,11 +40,6 @@
         send(id, selected / (numOptions - 1));
     }
 
-    // ── FilterGraph — denormalize store values to display units ──
-    $: loCutFreqDisp = Math.max(50,  Math.min(18000, 50 + 17950 * Math.pow($loCutFreq, 1 / 0.3)));
-    $: hiCutFreqDisp = Math.max(50,  Math.min(18000, 50 + 17950 * Math.pow($hiCutFreq, 1 / 0.3)));
-    $: hiCutQDisp    = Math.max(0.5, Math.min(9.0,   0.5 + 8.5   * Math.pow($hiCutQ,   1 / 0.5)));
-
     // ── Diffusion Network — denormalize crossoverFreq for NeuNumber ──
     $: crossoverDisp = +(200 + 7800 * Math.pow($crossoverFreq, 2)).toFixed(0);
 </script>
@@ -67,20 +61,7 @@
             <div class="panel-title">Input</div>
             <div class="panel-body">
 
-                <FilterGraph
-                    loCutFreq={loCutFreqDisp}
-                    hiCutFreq={hiCutFreqDisp}
-                    q={hiCutQDisp}
-                    loCut={$loCutEnabled > 0.5}
-                    hiCut={$hiCutEnabled > 0.5}
-                    on:change={e => {
-                        send('loCutEnabled', e.detail.loCut ? 1 : 0);
-                        send('hiCutEnabled', e.detail.hiCut ? 1 : 0);
-                        send('loCutFreq', toNormalized(e.detail.loCutFreq, 50, 18000, 0.3));
-                        send('hiCutFreq', toNormalized(e.detail.hiCutFreq, 50, 18000, 0.3));
-                        send('hiCutQ',    toNormalized(e.detail.q,         0.5, 9.0,  0.5));
-                    }}
-                />
+                <FilterGraph />
 
                 <div class="subsection-label">Predelay</div>
                 <NeuKnob label="Predelay" value={$predelay} min={0} max={500} unit=" ms"
@@ -187,20 +168,7 @@
                 </div>
 
                 <!-- Row 3: Graph (full width) -->
-                <NeuDiffusionNetworkGraph
-                    crossoverFreq={$crossoverFreq}
-                    diffusion={$diffusion}
-                    damping={$damping}
-                    feedback={$feedback}
-                    highFilterType={$highFilterType > 0.5}
-                    activeBand={activeBand}
-                    on:change={e => {
-                        send('crossoverFreq', e.detail.crossoverFreq);
-                        send('diffusion',     e.detail.diffusion);
-                        send('damping',       e.detail.damping);
-                        send('feedback',      e.detail.feedback);
-                    }}
-                />
+                <NeuDiffusionNetworkGraph {activeBand} />
 
                 <!-- Diffusion + Scale readouts -->
                 <div class="row" style="gap:10px;">
@@ -257,8 +225,8 @@
                                 selected={$smoothSelected}
                                 on:change={e => sendSelector('smooth', e.detail.selected, 4)}
                             />
-                            <NeuKnob label="Size" value={$size} min={0.22} max={500} unit=""
-                                on:change={e => send('size', e.detail.value)} />
+                            <NeuKnob label="Size" value={+(0.22 * Math.pow(500.0 / 0.22, $size)).toFixed(2)} min={0.22} max={500} unit=""
+                                on:change={e => send('size', sizeToNormalized(e.detail.value))} />
                         </div>
                     </div>
 

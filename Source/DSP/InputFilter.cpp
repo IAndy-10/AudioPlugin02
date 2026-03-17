@@ -43,12 +43,12 @@ void InputFilter::updateHP() {
     double sin_w = std::sin(omega);
     double alpha = sin_w / (2.0 * kSqrt2Inv);
 
-    double a0 = 1.0 + alpha;
-    hp_b0 =  (1.0 + cos_w) / (2.0 * a0);
+    double a0 =  1.0 + alpha;
+    hp_b0 =  (1.0 + cos_w) / (2.0 * a0);   // HPF: numerator uses (1 + cos_w), not (1 - cos_w)
     hp_b1 = -(1.0 + cos_w) / a0;
     hp_b2 =  (1.0 + cos_w) / (2.0 * a0);
     hp_a1 = -2.0 * cos_w / a0;
-    hp_a2 = (1.0 - alpha) / a0;
+    hp_a2 =  (1.0 - alpha) / a0;
 }
 
 // 2nd-order low-pass biquad with variable Q

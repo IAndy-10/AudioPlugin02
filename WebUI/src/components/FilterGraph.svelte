@@ -1,16 +1,12 @@
 <script>
-  import { createEventDispatcher, onMount } from 'svelte';
+  import { onMount } from 'svelte';
+  import { params, toNormalized } from '../state/store';
+  import { bridge } from '../bridge/bridge';
   import NeuNumber from './NeuNumber.svelte';
   import NeuButton from './NeuButton.svelte';
 
-  // Props — all in display units (Hz / Q), normalization done by parent
-  export let loCutFreq = 200;    // Hz (50–18000)
-  export let hiCutFreq = 8000;   // Hz (50–18000)
-  export let q         = 1.0;    // Q factor (0.5–9.0)
-  export let loCut     = false;  // high-pass enable
-  export let hiCut     = false;  // low-pass enable
-
-  const dispatch = createEventDispatcher();
+  // ── Destructure individual stores (params is a plain object of stores) ────
+  const { loCutEnabled, hiCutEnabled, loCutFreq, hiCutFreq, hiCutQ } = params;
 
   // ── Canvas constants ───────────────────────────────────────
   const CW = 300, CH = 110;
@@ -22,12 +18,30 @@
   let canvas;
   let dragging = false;
   let dragStartClientX, dragStartClientY;
-  let dragStartActiveFreq, dragStartQ;
+  let dragStartFreq, dragStartQ;
 
-  // The active handle tracks whichever band is being edited
-  $: activeFreq = (loCut && !hiCut) ? loCutFreq : hiCutFreq;
+  // ── Display values derived from stores (exact JUCE skew formula) ─────────
+  // These update automatically when the C++ polling timer fires.
+  $: loCutFreqDisp = 50 + 17950 * Math.pow($loCutFreq, 1 / 0.3);
+  $: hiCutFreqDisp = 50 + 17950 * Math.pow($hiCutFreq, 1 / 0.3);
+  $: hiCutQDisp    = 0.5 + 8.5 * Math.pow($hiCutQ, 1 / 0.5);
+  $: loCutOn       = $loCutEnabled > 0.5;
+  $: hiCutOn       = $hiCutEnabled > 0.5;
+  // Single handle tracks the active band
+  $: activeFreq    = (loCutOn && !hiCutOn) ? loCutFreqDisp : hiCutFreqDisp;
 
-  // ── Frequency ↔ X (log scale) ─────────────────────────────
+  // ── Send helper: update store + bridge in one call ────────
+  function send(id, value) {
+    params[id].set(value);
+    bridge.sendParameterChange(id, value);
+  }
+
+  // ── Reactive canvas redraw ─────────────────────────────────
+  // Fires whenever any store changes (C++ → JS polling, or drag update).
+  $: if (canvas) { loCutFreqDisp; hiCutFreqDisp; hiCutQDisp; loCutOn; hiCutOn; draw(); }
+  onMount(() => draw());
+
+  // ── Coordinate conversions ─────────────────────────────────
   function freqToX(f) {
     return MX + (CW - 2 * MX) * Math.log10(f / FMIN) / Math.log10(FMAX / FMIN);
   }
@@ -35,15 +49,11 @@
     const norm = (x - MX) / (CW - 2 * MX);
     return FMIN * Math.pow(FMAX / FMIN, norm);
   }
-
-  // ── Magnitude → Y (dB scale) ──────────────────────────────
   function magToY(mag) {
     const db = 20 * Math.log10(Math.max(mag, 1e-6));
     const clamped = Math.max(DB_BOT, Math.min(DB_TOP, db));
     return CH - MY - ((clamped - DB_BOT) / (DB_TOP - DB_BOT)) * (CH - 2 * MY);
   }
-
-  // ── Q ↔ Y (log scale) ─────────────────────────────────────
   function qToY(qv) {
     const norm = (Math.log(qv) - Math.log(QMIN)) / (Math.log(QMAX) - Math.log(QMIN));
     return MY + (1 - norm) * (CH - 2 * MY);
@@ -55,12 +65,12 @@
 
   // ── Filter transfer functions ──────────────────────────────
   function hpMag(f) {
-    const r = f / loCutFreq;
+    const r = f / loCutFreqDisp;
     return (r * r) / Math.sqrt(1 + r * r * r * r);
   }
   function lpMag(f) {
-    const r = f / hiCutFreq;
-    return 1 / Math.sqrt((1 - r * r) * (1 - r * r) + (r / q) * (r / q));
+    const r = f / hiCutFreqDisp;
+    return 1 / Math.sqrt((1 - r * r) * (1 - r * r) + (r / hiCutQDisp) * (r / hiCutQDisp));
   }
 
   // ── Draw ──────────────────────────────────────────────────
@@ -88,10 +98,10 @@
       const f = xToFreq(px);
       if (f < FMIN || f > FMAX) continue;
       let mag;
-      if      (!loCut && !hiCut) mag = 1.0;
-      else if ( loCut && !hiCut) mag = hpMag(f);
-      else if (!loCut &&  hiCut) mag = lpMag(f);
-      else                       mag = hpMag(f) * lpMag(f);
+      if      (!loCutOn && !hiCutOn) mag = 1.0;
+      else if ( loCutOn && !hiCutOn) mag = hpMag(f);
+      else if (!loCutOn &&  hiCutOn) mag = lpMag(f);
+      else                           mag = hpMag(f) * lpMag(f);
       pts.push([px, magToY(mag)]);
     }
 
@@ -106,9 +116,9 @@
     ctx.strokeStyle = '#00c8b4';
     ctx.lineWidth = 1.8; ctx.lineJoin = 'round'; ctx.stroke();
 
-    // ── Active handle ─────────────────────────────────────
+    // ── Active handle ──────────────────────────────────────
     const hx = freqToX(activeFreq);
-    const hy = qToY(q);
+    const hy = qToY(hiCutQDisp);
 
     ctx.beginPath(); ctx.moveTo(hx, MY); ctx.lineTo(hx, hy - 6.5);
     ctx.strokeStyle = 'rgba(245,166,35,0.13)'; ctx.lineWidth = 0.8;
@@ -131,25 +141,22 @@
     ctx.fillText(freqLabel, hx, CH - 1);
   }
 
-  $: if (canvas) { loCutFreq; hiCutFreq; q; loCut; hiCut; draw(); }
-  onMount(() => draw());
-
-  // ── Drag ──────────────────────────────────────────────────
+  // ── Mouse drag ────────────────────────────────────────────
   function onCanvasMouseDown(e) {
-    const rect = canvas.getBoundingClientRect();
+    const rect  = canvas.getBoundingClientRect();
     const scaleX = CW / rect.width;
     const scaleY = CH / rect.height;
     const mx = (e.clientX - rect.left) * scaleX;
     const my = (e.clientY - rect.top)  * scaleY;
     const hx = freqToX(activeFreq);
-    const hy = qToY(q);
+    const hy = qToY(hiCutQDisp);
 
     if (Math.hypot(mx - hx, my - hy) < 16) {
-      dragging = true;
-      dragStartClientX   = e.clientX;
-      dragStartClientY   = e.clientY;
-      dragStartActiveFreq = activeFreq;
-      dragStartQ = q;
+      dragging          = true;
+      dragStartClientX  = e.clientX;
+      dragStartClientY  = e.clientY;
+      dragStartFreq     = activeFreq;
+      dragStartQ        = hiCutQDisp;
       window.addEventListener('mousemove', onDragMove);
       window.addEventListener('mouseup',   onDragUp);
     }
@@ -157,22 +164,22 @@
 
   function onDragMove(e) {
     if (!dragging) return;
-    const rect = canvas.getBoundingClientRect();
+    const rect  = canvas.getBoundingClientRect();
     const scaleX = CW / rect.width;
     const scaleY = CH / rect.height;
-
     const dx = (e.clientX - dragStartClientX) * scaleX;
-    const newFreq = Math.min(FMAX, Math.max(FMIN,
-      xToFreq(freqToX(dragStartActiveFreq) + dx)));
-
-    if (loCut && !hiCut) loCutFreq = newFreq;
-    else                 hiCutFreq = newFreq;
-
     const dy = (e.clientY - dragStartClientY) * scaleY;
-    q = yToQ(qToY(dragStartQ) + dy);
+
+    // Horizontal: frequency → send normalized to loCutFreq or hiCutFreq
+    const newFreq  = Math.min(FMAX, Math.max(FMIN, xToFreq(freqToX(dragStartFreq) + dx)));
+    const freqId   = (loCutOn && !hiCutOn) ? 'loCutFreq' : 'hiCutFreq';
+    send(freqId, toNormalized(newFreq, FMIN, FMAX, 0.3));
+
+    // Vertical: Q → send normalized to hiCutQ
+    const newQ = Math.min(QMAX, Math.max(QMIN, yToQ(qToY(dragStartQ) + dy)));
+    send('hiCutQ', toNormalized(newQ, QMIN, QMAX, 0.5));
 
     draw();
-    dispatch('change', { loCutFreq, hiCutFreq, q, loCut, hiCut });
   }
 
   function onDragUp() {
@@ -184,14 +191,13 @@
 
   // ── NeuNumber handlers ─────────────────────────────────────
   function onFreqChange(e) {
-    const v = Math.min(FMAX, Math.max(FMIN, e.detail.value));
-    if (loCut && !hiCut) loCutFreq = v;
-    else                 hiCutFreq = v;
-    dispatch('change', { loCutFreq, hiCutFreq, q, loCut, hiCut });
+    const v  = Math.min(FMAX, Math.max(FMIN, e.detail.value));
+    const id = (loCutOn && !hiCutOn) ? 'loCutFreq' : 'hiCutFreq';
+    send(id, toNormalized(v, FMIN, FMAX, 0.3));
   }
   function onQChange(e) {
-    q = e.detail.value;
-    dispatch('change', { loCutFreq, hiCutFreq, q, loCut, hiCut });
+    const v = Math.min(QMAX, Math.max(QMIN, e.detail.value));
+    send('hiCutQ', toNormalized(v, QMIN, QMAX, 0.5));
   }
 </script>
 
@@ -199,11 +205,11 @@
 
   <!-- ── Toggles ────────────────────────────────────────── -->
   <div class="toggles">
-    <NeuButton label="Lo Cut" active={loCut}
-      on:change={e => { loCut = e.detail.active; dispatch('change', { loCutFreq, hiCutFreq, q, loCut, hiCut }); }}
+    <NeuButton label="Lo Cut" active={loCutOn}
+      on:change={e => send('loCutEnabled', e.detail.active ? 1 : 0)}
     />
-    <NeuButton label="Hi Cut" active={hiCut}
-      on:change={e => { hiCut = e.detail.active; dispatch('change', { loCutFreq, hiCutFreq, q, loCut, hiCut }); }}
+    <NeuButton label="Hi Cut" active={hiCutOn}
+      on:change={e => send('hiCutEnabled', e.detail.active ? 1 : 0)}
     />
   </div>
 
@@ -215,7 +221,7 @@
       class="graph-canvas"
       class:dragging
       on:mousedown={onCanvasMouseDown}
-    />
+    ></canvas>
   </div>
 
   <!-- ── Readouts ───────────────────────────────────────── -->
@@ -228,7 +234,7 @@
     />
     <NeuNumber
       label="WIDTH"
-      value={+q.toFixed(2)}
+      value={+hiCutQDisp.toFixed(2)}
       min={0.5} max={9} step={0.01} decimals={2}
       on:change={onQChange}
     />

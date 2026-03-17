@@ -64,45 +64,65 @@ void AudioPluginAudioProcessor::prepareToPlay(double sampleRate, int samplesPerB
         sv.setCurrentAndTargetValue(initial);
     };
 
-    initSmooth(smoothDecay,         apvts.getRawParameterValue(decay.getParamID())->load());
+    // ===== PANEL 1: INPUT =====
+    // FilterGraph: lo/hi cut frequencies
+    initSmooth(smoothLoCutFreq, apvts.getRawParameterValue(loCutFreq.getParamID())->load());
+    initSmooth(smoothHiCutFreq, apvts.getRawParameterValue(hiCutFreq.getParamID())->load());
+    // Predelay subsection
+    initSmooth(smoothPredelay, apvts.getRawParameterValue(PluginParamIDs::predelay.getParamID())->load());
+
+    // ===== PANEL 2: EARLY REFLECTIONS =====
+    initSmooth(smoothErAmount, apvts.getRawParameterValue(erAmount.getParamID())->load());
+    initSmooth(smoothErRate,   apvts.getRawParameterValue(erRate.getParamID())->load());
+    // Shape subsection: Reflect gain
+    initSmooth(smoothReflectGain, apvts.getRawParameterValue(reflectGain.getParamID())->load());
+
+    // ===== PANEL 3: DIFFUSION NETWORK =====
+    initSmooth(smoothCrossoverFreq, apvts.getRawParameterValue(crossoverFreq.getParamID())->load());
     initSmooth(smoothDiffusion,     apvts.getRawParameterValue(diffusion.getParamID())->load());
-    initSmooth(smoothSize,          apvts.getRawParameterValue(size.getParamID())->load());
     initSmooth(smoothDamping,       apvts.getRawParameterValue(damping.getParamID())->load());
     initSmooth(smoothFeedback,      apvts.getRawParameterValue(feedback.getParamID())->load());
-    initSmooth(smoothPredelay,      apvts.getRawParameterValue(PluginParamIDs::predelay.getParamID())->load());
-    initSmooth(smoothStereo,        apvts.getRawParameterValue(stereo.getParamID())->load());
-    initSmooth(smoothDryWet,        apvts.getRawParameterValue(dryWet.getParamID())->load());
-    initSmooth(smoothChorusAmount,  apvts.getRawParameterValue(chorusAmount.getParamID())->load());
-    initSmooth(smoothChorusRate,    apvts.getRawParameterValue(chorusRate.getParamID())->load());
-    initSmooth(smoothCrossoverFreq, apvts.getRawParameterValue(crossoverFreq.getParamID())->load());
-    initSmooth(smoothReflectGain,   apvts.getRawParameterValue(reflectGain.getParamID())->load());
     initSmooth(smoothDiffuseGain,   apvts.getRawParameterValue(diffuseGain.getParamID())->load());
-    initSmooth(smoothErAmount,      apvts.getRawParameterValue(erAmount.getParamID())->load());
-    initSmooth(smoothErRate,        apvts.getRawParameterValue(erRate.getParamID())->load());
-    initSmooth(smoothLoCutFreq,     apvts.getRawParameterValue(loCutFreq.getParamID())->load());
-    initSmooth(smoothHiCutFreq,     apvts.getRawParameterValue(hiCutFreq.getParamID())->load());
+    // Chorus subsection
+    initSmooth(smoothChorusAmount, apvts.getRawParameterValue(chorusAmount.getParamID())->load());
+    initSmooth(smoothChorusRate,   apvts.getRawParameterValue(chorusRate.getParamID())->load());
+    // Size subsection
+    initSmooth(smoothSize, apvts.getRawParameterValue(size.getParamID())->load());
+
+    // ===== PANEL 4: DECAY =====
+    initSmooth(smoothDecay, apvts.getRawParameterValue(decay.getParamID())->load());
+
+    // ===== PANEL 5: OUTPUT =====
+    initSmooth(smoothStereo, apvts.getRawParameterValue(stereo.getParamID())->load());
+    initSmooth(smoothDryWet, apvts.getRawParameterValue(dryWet.getParamID())->load());
+
 
     updateDSPParameters();
 }
 
-void AudioPluginAudioProcessor::releaseResources() {}
+void AudioPluginAudioProcessor::releaseResources() {
+    inputFilter.reset();
+}
 
 void AudioPluginAudioProcessor::updateDSPParameters() {
-    // Input filter
+    // Parameters → DSP mapping (grouped by WebUI panels in `WebUI/src/App.svelte`)
+
+    // ===== PANEL 1: INPUT =====
     inputFilter.setLoCutEnabled(apvts.getRawParameterValue(loCutEnabled.getParamID())->load() > 0.5f);
     inputFilter.setHiCutEnabled(apvts.getRawParameterValue(hiCutEnabled.getParamID())->load() > 0.5f);
     inputFilter.setLoCutFreq(apvts.getRawParameterValue(loCutFreq.getParamID())->load());
     inputFilter.setHiCutFreq(apvts.getRawParameterValue(hiCutFreq.getParamID())->load());
     inputFilter.setHiCutQ(apvts.getRawParameterValue(hiCutQ.getParamID())->load());
+    predelayModule.setDelayMs(apvts.getRawParameterValue(PluginParamIDs::predelay.getParamID())->load());
 
-    // Early reflections
+    // ===== PANEL 2: EARLY REFLECTIONS =====
     // erAmount APVTS stores 2–55 (display units). Normalize to 0–1 for DSP.
     earlyReflections.setEnabled(apvts.getRawParameterValue(erEnabled.getParamID())->load() > 0.5f);
     earlyReflections.setAmount((apvts.getRawParameterValue(erAmount.getParamID())->load() - 2.0f) / 53.0f);
     earlyReflections.setRate(apvts.getRawParameterValue(erRate.getParamID())->load());  // already in Hz
     earlyReflections.setShape(apvts.getRawParameterValue(erShape.getParamID())->load());
 
-    // FDN
+    // ===== PANEL 3: DIFFUSION NETWORK =====
     fdnReverb.setDecayMs(apvts.getRawParameterValue(decay.getParamID())->load());
     fdnReverb.setDiffusion(apvts.getRawParameterValue(diffusion.getParamID())->load());
     fdnReverb.setSize(apvts.getRawParameterValue(size.getParamID())->load());
@@ -113,13 +133,11 @@ void AudioPluginAudioProcessor::updateDSPParameters() {
     fdnReverb.setFrozen(apvts.getRawParameterValue(PluginParamIDs::freeze.getParamID())->load() > 0.5f);
     fdnReverb.setHighFilterType(apvts.getRawParameterValue(highFilterType.getParamID())->load() > 0.5f);
 
-    // Chorus
+    // Chorus subsection (Diffusion Network)
     chorusModule.setAmount(apvts.getRawParameterValue(chorusAmount.getParamID())->load());
     chorusModule.setRate(apvts.getRawParameterValue(chorusRate.getParamID())->load());
 
-    // Predelay
-    predelayModule.setDelayMs(apvts.getRawParameterValue(PluginParamIDs::predelay.getParamID())->load());
-
+    // ===== PANEL 5: OUTPUT =====
     // Widener: stereo APVTS stores degrees (0–120) → width = degrees / 120.
     stereoWidener.setWidth(apvts.getRawParameterValue(stereo.getParamID())->load() / 120.0f);
 
@@ -140,17 +158,25 @@ void AudioPluginAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     dryWetMixer.saveDry(buffer);
 
     // --- Signal chain ---
-    // 1. Input filter
+    // ===== PANEL 1: INPUT =====
+    // 1. Input filter — update parameters every block so UI changes take effect immediately
+    inputFilter.setLoCutEnabled(apvts.getRawParameterValue(loCutEnabled.getParamID())->load() > 0.5f);
+    inputFilter.setHiCutEnabled(apvts.getRawParameterValue(hiCutEnabled.getParamID())->load() > 0.5f);
+    inputFilter.setLoCutFreq(apvts.getRawParameterValue(loCutFreq.getParamID())->load());
+    inputFilter.setHiCutFreq(apvts.getRawParameterValue(hiCutFreq.getParamID())->load());
+    inputFilter.setHiCutQ(apvts.getRawParameterValue(hiCutQ.getParamID())->load());
     inputFilter.process(buffer);
 
-    // 2. Predelay
+    // 2. Predelay (Input panel)
     predelayModule.setDelayMs(apvts.getRawParameterValue(PluginParamIDs::predelay.getParamID())->load());
     predelayModule.process(buffer);
 
+    // ===== PANEL 2: EARLY REFLECTIONS =====
     // 3. Early reflections (additive)
     earlyReflections.setEnabled(apvts.getRawParameterValue(erEnabled.getParamID())->load() > 0.5f);
     earlyReflections.process(buffer);
 
+    // ===== PANEL 3: DIFFUSION NETWORK =====
     // 4. FDN reverb (replaces signal with reverb output)
     bool isFrozen = apvts.getRawParameterValue(PluginParamIDs::freeze.getParamID())->load() > 0.5f;
     fdnReverb.setFrozen(isFrozen);
@@ -158,17 +184,20 @@ void AudioPluginAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     fdnReverb.setDiffusion(apvts.getRawParameterValue(diffusion.getParamID())->load());
     fdnReverb.process(buffer);
 
-    // 5. Apply reflect and diffuse gains
+    // 5. Apply reflect and diffuse gains (Reflect: Early Reflections, Diffuse: Diffusion Network)
     float rGain = juce::Decibels::decibelsToGain(
         apvts.getRawParameterValue(reflectGain.getParamID())->load());
     float dGain = juce::Decibels::decibelsToGain(
         apvts.getRawParameterValue(diffuseGain.getParamID())->load());
     buffer.applyGain(rGain * dGain);
 
-    // 6. Chorus
+    // 6. Chorus subsection (Diffusion Network)
+    bool chorusOn = apvts.getRawParameterValue(chorusEnabled.getParamID())->load() > 0.5f;
     chorusModule.setAmount(apvts.getRawParameterValue(chorusAmount.getParamID())->load());
-    chorusModule.process(buffer);
+    chorusModule.setRate(apvts.getRawParameterValue(chorusRate.getParamID())->load());
+    if (chorusOn) chorusModule.process(buffer);
 
+    // ===== PANEL 5: OUTPUT =====
     // 7. Stereo widener
     // stereo APVTS stores degrees (0–120). Convert to internal width (0–1):
     //   0°  = mono (width 0.0), 120° = unchanged stereo (width 1.0).

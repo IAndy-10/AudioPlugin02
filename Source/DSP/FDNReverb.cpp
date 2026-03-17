@@ -9,8 +9,10 @@ void FDNReverb::prepare(double sampleRate) {
     double ratio = sampleRate / 44100.0;
 
     for (int i = 0; i < N; ++i) {
+        // Allocate at maximum size (sizeScale=1.0 → factor=1.5) so setSize(1.0) never clamps.
+        int maxLen = static_cast<int>(BASE_DELAYS[i] * ratio * 1.5) + 32;
+        delayLines[i].prepare(maxLen);
         delayLens[i] = static_cast<int>(BASE_DELAYS[i] * ratio * (0.5 + sizeScale));
-        delayLines[i].prepare(delayLens[i] + 32); // extra room for modulation
 
         dampFilters[i].prepare(sampleRate);
         dampFilters[i].setCutoffFreq(crossFreq);
