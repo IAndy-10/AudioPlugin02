@@ -12,7 +12,9 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor(AudioPluginAudi
         onParameterChangedFromJS(paramId, value);
     });
 
-    setSize(900, 560);
+    setSize(960, 700);
+    setResizable(true, true); 
+    setResizeLimits(450, 280, 1800, 1120);
 
     // Unpack HTML from binary data to a temp dir and load
     auto tempDir = juce::File::getSpecialLocation(juce::File::tempDirectory)
@@ -72,7 +74,8 @@ void AudioPluginAudioProcessorEditor::timerCallback() {
     sendIfChanged(dryWet.getParamID());
     sendIfChanged(predelay.getParamID());     sendIfChanged(smooth.getParamID());
     sendIfChanged(size.getParamID());         sendIfChanged(freeze.getParamID());
-    sendIfChanged(flatCut.getParamID());      sendIfChanged(stereo.getParamID());
+    sendIfChanged(flatEnabled.getParamID());  sendIfChanged(cutEnabled.getParamID());
+    sendIfChanged(stereo.getParamID());       sendIfChanged(highFilterType.getParamID());
     sendIfChanged(density.getParamID());
 }
 
@@ -100,7 +103,8 @@ void AudioPluginAudioProcessorEditor::sendAllParamsToJS() {
     sendAll(dryWet.getParamID());
     sendAll(predelay.getParamID());     sendAll(smooth.getParamID());
     sendAll(size.getParamID());         sendAll(freeze.getParamID());
-    sendAll(flatCut.getParamID());      sendAll(stereo.getParamID());
+    sendAll(flatEnabled.getParamID());  sendAll(cutEnabled.getParamID());
+    sendAll(stereo.getParamID());       sendAll(highFilterType.getParamID());
     sendAll(density.getParamID());
 }
 

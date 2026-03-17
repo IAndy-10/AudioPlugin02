@@ -77,10 +77,16 @@ void FDNReverb::setFrozen(bool isFrozen) {
 
 void FDNReverb::setReverbMode(int m) {
     mode = m;
-    // Mode 0 (High) = brighter, Mode 1 (Low) = darker
+    // Mode 0 (High) = brighter (1.5× crossover), Mode 1 (Low) = darker (0.6× crossover).
+    // Resulting cutoffs at extremes: 200×0.6=120Hz (safe) to 8000×1.5=12000Hz (safe, coeff≈0.82 < 1).
     float freqScale = (mode == 0) ? 1.5f : 0.6f;
     for (auto& f : dampFilters)
         f.setCutoffFreq(crossFreq * freqScale);
+}
+
+void FDNReverb::setHighFilterType(bool shelving) {
+    for (auto& f : dampFilters)
+        f.setFilterType(shelving);
 }
 
 void FDNReverb::updateDecayGains() {

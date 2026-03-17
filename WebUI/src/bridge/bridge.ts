@@ -24,6 +24,7 @@ class ParameterBridge {
 
     // Send normalized 0-1 value to C++ APVTS via juce:// URL scheme
     sendParameterChange(id: ParameterId, value: number) {
+        if (window.location.protocol.startsWith('http')) return;
         window.location.href = `juce://setparameter?name=${id}&value=${value}`;
     }
 }

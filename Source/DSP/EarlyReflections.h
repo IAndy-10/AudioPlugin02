@@ -24,8 +24,13 @@ private:
     static constexpr int BASE_TAPS_L[NUM_TAPS] = { 89, 151, 211, 347, 431, 557, 683, 809 };
     static constexpr int BASE_TAPS_R[NUM_TAPS] = { 107, 167, 241, 367, 461, 587, 709, 839 };
 
-    static constexpr float TAP_GAINS[NUM_TAPS] = {
+    // Gradual (shape=0): slow exponential decay across taps.
+    static constexpr float TAP_GAINS_GRADUAL[NUM_TAPS] = {
         0.85f, 0.70f, 0.60f, 0.50f, 0.40f, 0.35f, 0.28f, 0.22f
+    };
+    // Rapid (shape=1): steep early cut-off, energy concentrated in first taps.
+    static constexpr float TAP_GAINS_RAPID[NUM_TAPS] = {
+        0.90f, 0.55f, 0.33f, 0.20f, 0.12f, 0.07f, 0.04f, 0.02f
     };
 
     std::array<DelayLine, NUM_TAPS> delayL;

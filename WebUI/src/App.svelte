@@ -1,12 +1,32 @@
 <script lang="ts">
-    import { store, setParameterValue } from './state/store';
+    import {
+        params, setParameterValue,
+        modeSelected, smoothSelected, densitySelected, flatCutSelected,
+        crossoverHz, diffusionPct
+    } from './state/store';
     import { bridge } from './bridge/bridge';
     import type { ParameterId } from './types/parameters';
 
     import NeuKnob     from './components/NeuKnob.svelte';
     import NeuButton   from './components/NeuButton.svelte';
     import NeuSelector from './components/NeuSelector.svelte';
-    import NeuXYPad    from './components/NeuXYPad.svelte';
+    import NeuNumber   from './components/NeuNumber.svelte';
+    import FilterGraph from './components/FilterGraph.svelte';
+    import NeuDiffusionNetworkGraph from './components/NeuDiffusionNetworkGraph.svelte';
+
+    let filterFreq = 1000;
+    let filterQ    = 1.0;
+    let filterLoCut = false;
+    let filterHiCut = false;
+
+    // Destructure individual stores so Svelte's $X auto-subscribe syntax works
+    const {
+        erEnabled, erAmount, erRate, erShape,
+        crossoverFreq, diffusion, scale, decay, damping, feedback,
+        choEnable, chorusAmount, chorusRate,
+        reflectGain, diffuseGain, dryWet,
+        predelay, size, freeze, stereo,
+    } = params;
 
     function send(id: ParameterId, value: number) {
         setParameterValue(id, value);
@@ -21,21 +41,6 @@
         send(id, selected / (numOptions - 1));
     }
 
-    // XY Pad → decay (X) and diffusion (Y) macro
-    let xyX = 0.42;
-    let xyY = 0.6;
-    function onXYChange(e: CustomEvent) {
-        xyX = e.detail.x;
-        xyY = e.detail.y;
-        send('decay', xyX);
-        send('diffusion', xyY);
-    }
-
-    // Selector indices derived from normalized values
-    $: modeSelected   = Math.round($store.reverbMode.value);
-    $: smoothSelected = Math.round($store.smooth.value * 3);
-    $: densitySelected = Math.round($store.density.value * 3);
-    $: flatCutSelected = Math.round($store.flatCut.value);
 </script>
 
 <main class="plugin-root">
@@ -44,12 +49,6 @@
     <div class="top-bar">
         <div class="plugin-title">
             <span class="title-main">Audio Plugin 02</span>
-            <span class="title-sub">FDN Reverb · Professional</span>
-        </div>
-        <div class="window-controls">
-            <div class="win-btn red"></div>
-            <div class="win-btn yellow"></div>
-            <div class="win-btn green"></div>
         </div>
     </div>
 
@@ -61,48 +60,19 @@
             <div class="panel-title">Input Filter</div>
 
             <div class="panel-body" style="gap:14px; align-items:center;">
-                <div class="row">
-                    <NeuButton
-                        label="Lo Cut"
-                        active={$store.loCutEnabled.value > 0.5}
-                        on:change={e => sendBool('loCutEnabled', e.detail.active)}
-                    />
-                    <NeuButton
-                        label="Hi Cut"
-                        active={$store.hiCutEnabled.value > 0.5}
-                        on:change={e => sendBool('hiCutEnabled', e.detail.active)}
-                    />
-                </div>
-
-                <!-- Frequency response placeholder -->
-                <div class="freq-graph">
-                    <svg viewBox="0 0 120 60" class="freq-svg">
-                        <path
-                            d="M 0 50 Q 20 50 30 30 Q 40 10 60 10 Q 80 10 90 30 Q 100 50 120 50"
-                            fill="none" stroke="rgba(160,130,90,0.4)" stroke-width="1.5"
-                        />
-                    </svg>
-                </div>
-
-                <div class="freq-readouts">
-                    <div class="freq-val">
-                        <span class="freq-label">LO</span>
-                        <span class="freq-num">
-                            {Math.round(20 + $store.loCutFreq.value * 480)} Hz
-                        </span>
-                    </div>
-                    <div class="freq-val">
-                        <span class="freq-label">HI</span>
-                        <span class="freq-num">
-                            {Math.round(1000 + $store.hiCutFreq.value * 19000)} Hz
-                        </span>
-                    </div>
-                </div>
-
-                <NeuKnob label="LO FREQ" value={$store.loCutFreq.value} min={20} max={500} unit=" Hz"
-                    on:change={e => send('loCutFreq', e.detail.value)} />
-                <NeuKnob label="HI FREQ" value={$store.hiCutFreq.value} min={1000} max={20000} unit=" Hz"
-                    on:change={e => send('hiCutFreq', e.detail.value)} />
+                <!-- Filter graph -->
+                <FilterGraph
+                    freq={filterFreq}
+                    q={filterQ}
+                    loCut={filterLoCut}
+                    hiCut={filterHiCut}
+                    on:change={e => {
+                        filterFreq   = e.detail.freq;
+                        filterQ      = e.detail.q;
+                        filterLoCut  = e.detail.loCut;
+                        filterHiCut  = e.detail.hiCut;
+                    }}
+                />
             </div>
         </section>
 
@@ -113,19 +83,19 @@
             <div class="panel-body" style="gap:14px; align-items:center;">
                 <NeuButton
                     label="Spin"
-                    active={$store.erEnabled.value > 0.5}
+                    active={$erEnabled > 0.5}
                     icon="↺"
                     on:change={e => sendBool('erEnabled', e.detail.active)}
                 />
 
                 <div class="row">
-                    <NeuKnob label="Amount" value={$store.erAmount.value} min={0} max={100} unit="%"
-                        on:change={e => send('erAmount', e.detail.value)} />
-                    <NeuKnob label="Rate" value={$store.erRate.value} min={0.1} max={10} unit=" Hz"
-                        on:change={e => send('erRate', e.detail.value)} />
+                    <NeuNumber label="Amount" value={+($erAmount * 53 + 2).toFixed(1)} min={2} max={55} step={0.5} unit="%" decimals={1}
+                        on:change={e => send('erAmount', (e.detail.value - 2) / 53)} />
+                    <NeuNumber label="Rate" value={+($erRate * 1.23 + 0.07).toFixed(2)} min={0.07} max={1.3} step={0.01} unit=" Hz" decimals={2}
+                        on:change={e => send('erRate', (e.detail.value - 0.07) / 1.23)} />
                 </div>
 
-                <NeuKnob label="Shape" value={$store.erShape.value} min={0} max={100} unit="%"
+                <NeuKnob label="Shape" value={$erShape} min={0} max={100} unit="%"
                     on:change={e => send('erShape', e.detail.value)} />
             </div>
         </section>
@@ -133,77 +103,19 @@
         <!-- ===== PANEL 3: DIFFUSION NETWORK (largest) ===== -->
         <section class="panel panel-diffusion">
             <div class="panel-title">Diffusion Network</div>
-
-            <div class="panel-body" style="gap:12px;">
-
-                <!-- Top row: mode selector + crossover freq display -->
-                <div class="row" style="justify-content:space-between; width:100%;">
-                    <NeuSelector
-                        label="Mode"
-                        options={['High', 'Low']}
-                        selected={modeSelected}
-                        on:change={e => sendSelector('reverbMode', e.detail.selected, 2)}
-                    />
-                    <div class="display-block">
-                        <span class="disp-label">Freq</span>
-                        <span class="disp-val">
-                            {(200 + $store.crossoverFreq.value * 7800).toFixed(0)} Hz
-                        </span>
-                    </div>
-                    <div class="display-block">
-                        <span class="disp-label">Diffuse</span>
-                        <span class="disp-val">{($store.diffusion.value * 100).toFixed(0)}%</span>
-                    </div>
-                </div>
-
-                <!-- Center: XY Pad + freq graph -->
-                <div class="diffusion-center">
-                    <div class="freq-graph wide">
-                        <svg viewBox="0 0 200 80" class="freq-svg">
-                            <!-- Frequency response shape -->
-                            <path
-                                d="M 0 70 C 30 70 40 20 80 15 C 120 10 140 40 160 60 C 180 70 200 70 200 70"
-                                fill="rgba(160,130,90,0.08)" stroke="rgba(160,130,90,0.4)" stroke-width="1.5"
-                            />
-                            <!-- Node 1 -->
-                            <circle cx={80 + $store.crossoverFreq.value * 40} cy={15 + $store.damping.value * 40}
-                                r="6" fill="#e8e0d4"
-                                stroke="rgba(150,120,80,0.4)" stroke-width="1.5"
-                            />
-                            <!-- Node 2 -->
-                            <circle cx={140 + $store.feedback.value * 30} cy={40 + $store.diffusion.value * 20}
-                                r="6" fill="#e8e0d4"
-                                stroke="rgba(150,120,80,0.4)" stroke-width="1.5"
-                            />
-                        </svg>
-                    </div>
-
-                    <div class="xy-and-params">
-                        <NeuXYPad
-                            x={xyX}
-                            y={xyY}
-                            labelX="DECAY"
-                            labelY="DIFFUSE"
-                            on:change={onXYChange}
-                        />
-                        <div class="col" style="gap:10px; margin-left:16px;">
-                            <NeuKnob label="Diffusion" value={$store.diffusion.value} min={0} max={100} unit="%"
-                                on:change={e => send('diffusion', e.detail.value)} />
-                            <NeuKnob label="Scale" value={$store.scale.value} min={0} max={100} unit="%"
-                                on:change={e => send('scale', e.detail.value)} />
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Bottom: crossover + damping + feedback knobs -->
-                <div class="row" style="gap:14px; justify-content:center;">
-                    <NeuKnob label="Crossover" value={$store.crossoverFreq.value} min={200} max={8000} unit=" Hz"
-                        on:change={e => send('crossoverFreq', e.detail.value)} />
-                    <NeuKnob label="Damping" value={$store.damping.value} min={0} max={100} unit="%"
-                        on:change={e => send('damping', e.detail.value)} />
-                    <NeuKnob label="Feedback" value={$store.feedback.value} min={0} max={100} unit="%"
-                        on:change={e => send('feedback', e.detail.value)} />
-                </div>
+            <div class="panel-body" style="gap:10px; align-items:center;">
+                <NeuDiffusionNetworkGraph
+                    crossoverFreq={$crossoverFreq}
+                    diffusion={$diffusion}
+                    damping={$damping}
+                    feedback={$feedback}
+                    on:change={e => {
+                        send('crossoverFreq', e.detail.crossoverFreq);
+                        send('diffusion',     e.detail.diffusion);
+                        send('damping',       e.detail.damping);
+                        send('feedback',      e.detail.feedback);
+                    }}
+                />
             </div>
         </section>
 
@@ -212,10 +124,17 @@
             <div class="panel-title">Chorus</div>
 
             <div class="panel-body" style="gap:14px; align-items:center;">
-                <NeuKnob label="Amount" value={$store.chorusAmount.value} min={0} max={100} unit="%"
-                    on:change={e => send('chorusAmount', e.detail.value)} />
-                <NeuKnob label="Rate" value={$store.chorusRate.value} min={0.1} max={10} unit=" Hz"
-                    on:change={e => send('chorusRate', e.detail.value)} />
+
+                <NeuButton
+                label="Chorus"
+                active={$choEnable > 0.5}
+                icon=":)"
+                on:change={e => sendBool('choEnable', e.detail.active)}
+            />
+                <NeuNumber label="Amount" value={+($chorusAmount * 3.99 + 0.01).toFixed(2)} min={0.01} max={4.00} step={0.01} decimals={2}
+                    on:change={e => send('chorusAmount', (e.detail.value - 0.01) / 3.99)} />
+                <NeuNumber label="Rate" value={+($chorusRate * 7.99 + 0.01).toFixed(2)} min={0.01} max={8.00} step={0.01} unit=" Hz" decimals={2}
+                    on:change={e => send('chorusRate', (e.detail.value - 0.01) / 7.99)} />
             </div>
         </section>
 
@@ -224,11 +143,11 @@
             <div class="panel-title-vertical">Reflect</div>
 
             <div class="panel-body" style="gap:14px; align-items:center;">
-                <NeuKnob label="Reflect" value={$store.reflectGain.value} min={-24} max={6} unit=" dB"
+                <NeuKnob label="Reflect" value={$reflectGain} min={-24} max={6} unit=" dB"
                     on:change={e => send('reflectGain', e.detail.value)} />
-                <NeuKnob label="Diffuse" value={$store.diffuseGain.value} min={-24} max={6} unit=" dB"
+                <NeuKnob label="Diffuse" value={$diffuseGain} min={-24} max={6} unit=" dB"
                     on:change={e => send('diffuseGain', e.detail.value)} />
-                <NeuKnob label="Dry/Wet" value={$store.dryWet.value} min={0} max={100} unit="%"
+                <NeuKnob label="Dry/Wet" value={$dryWet} min={0} max={100} unit="%"
                     on:change={e => send('dryWet', e.detail.value)} />
             </div>
         </section>
@@ -238,43 +157,42 @@
     <!-- ========== BOTTOM UTILITY ROW ========== -->
     <div class="bottom-row">
 
-        <NeuKnob label="Predelay" value={$store.predelay.value} min={0} max={500} unit=" ms"
-            on:change={e => send('predelay', e.detail.value)} />
+        <NeuNumber label="Predelay" value={$predelay * 500} min={0} max={500} step={1} unit=" ms" decimals={0}
+            on:change={e => send('predelay', e.detail.value / 500)} />
 
         <NeuSelector
             label="Smooth"
             options={['Off', 'Low', 'Med', 'High']}
-            selected={smoothSelected}
+            selected={$smoothSelected}
             on:change={e => sendSelector('smooth', e.detail.selected, 4)}
         />
 
-        <NeuKnob label="Size" value={$store.size.value} min={0} max={100} unit="%"
+        <NeuKnob label="Size" value={$size} min={0} max={100} unit="%"
             on:change={e => send('size', e.detail.value)} />
 
-        <NeuKnob label="Decay" value={$store.decay.value} min={100} max={10000} unit=" ms"
+        <NeuKnob label="Decay" value={$decay} min={100} max={10000} unit=" ms"
             on:change={e => send('decay', e.detail.value)} />
 
         <NeuButton
             label="Freeze"
-            active={$store.freeze.value > 0.5}
+            active={$freeze > 0.5}
             icon="❄"
             on:change={e => sendBool('freeze', e.detail.active)}
         />
 
         <NeuSelector
-            label="Flat/Cut"
             options={['Flat', 'Cut']}
-            selected={flatCutSelected}
+            selected={$flatCutSelected}
             on:change={e => sendSelector('flatCut', e.detail.selected, 2)}
         />
 
-        <NeuKnob label="Stereo" value={$store.stereo.value} min={0} max={200} unit="%"
+        <NeuKnob label="Stereo" value={$stereo} min={0} max={200} unit="%"
             on:change={e => send('stereo', e.detail.value)} />
 
         <NeuSelector
             label="Density"
             options={['Low', 'Med', 'High', 'Ultra']}
-            selected={densitySelected}
+            selected={$densitySelected}
             on:change={e => sendSelector('density', e.detail.selected, 4)}
         />
 

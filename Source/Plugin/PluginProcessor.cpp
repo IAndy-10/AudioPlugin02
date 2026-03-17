@@ -24,7 +24,7 @@ const juce::String AudioPluginAudioProcessor::getName() const { return JucePlugi
 bool AudioPluginAudioProcessor::acceptsMidi()  const { return true;  }
 bool AudioPluginAudioProcessor::producesMidi() const { return false; }
 bool AudioPluginAudioProcessor::isMidiEffect() const { return false; }
-double AudioPluginAudioProcessor::getTailLengthSeconds() const { return 10.0; }
+double AudioPluginAudioProcessor::getTailLengthSeconds() const { return 60.0; }
 int AudioPluginAudioProcessor::getNumPrograms() { return 1; }
 int AudioPluginAudioProcessor::getCurrentProgram() { return 0; }
 void AudioPluginAudioProcessor::setCurrentProgram(int) {}
@@ -93,11 +93,13 @@ void AudioPluginAudioProcessor::updateDSPParameters() {
     inputFilter.setHiCutEnabled(apvts.getRawParameterValue(hiCutEnabled.getParamID())->load() > 0.5f);
     inputFilter.setLoCutFreq(apvts.getRawParameterValue(loCutFreq.getParamID())->load());
     inputFilter.setHiCutFreq(apvts.getRawParameterValue(hiCutFreq.getParamID())->load());
+    inputFilter.setHiCutQ(apvts.getRawParameterValue(hiCutQ.getParamID())->load());
 
     // Early reflections
+    // erAmount APVTS stores 2–55 (display units). Normalize to 0–1 for DSP.
     earlyReflections.setEnabled(apvts.getRawParameterValue(erEnabled.getParamID())->load() > 0.5f);
-    earlyReflections.setAmount(apvts.getRawParameterValue(erAmount.getParamID())->load());
-    earlyReflections.setRate(apvts.getRawParameterValue(erRate.getParamID())->load());
+    earlyReflections.setAmount((apvts.getRawParameterValue(erAmount.getParamID())->load() - 2.0f) / 53.0f);
+    earlyReflections.setRate(apvts.getRawParameterValue(erRate.getParamID())->load());  // already in Hz
     earlyReflections.setShape(apvts.getRawParameterValue(erShape.getParamID())->load());
 
     // FDN
@@ -109,6 +111,7 @@ void AudioPluginAudioProcessor::updateDSPParameters() {
     fdnReverb.setCrossoverFreq(apvts.getRawParameterValue(crossoverFreq.getParamID())->load());
     fdnReverb.setReverbMode(static_cast<int>(apvts.getRawParameterValue(reverbMode.getParamID())->load()));
     fdnReverb.setFrozen(apvts.getRawParameterValue(PluginParamIDs::freeze.getParamID())->load() > 0.5f);
+    fdnReverb.setHighFilterType(apvts.getRawParameterValue(highFilterType.getParamID())->load() > 0.5f);
 
     // Chorus
     chorusModule.setAmount(apvts.getRawParameterValue(chorusAmount.getParamID())->load());
@@ -117,8 +120,8 @@ void AudioPluginAudioProcessor::updateDSPParameters() {
     // Predelay
     predelayModule.setDelayMs(apvts.getRawParameterValue(PluginParamIDs::predelay.getParamID())->load());
 
-    // Widener
-    stereoWidener.setWidth(apvts.getRawParameterValue(stereo.getParamID())->load());
+    // Widener: stereo APVTS stores degrees (0–120) → width = degrees / 120.
+    stereoWidener.setWidth(apvts.getRawParameterValue(stereo.getParamID())->load() / 120.0f);
 
     // Mixer
     dryWetMixer.setMix(apvts.getRawParameterValue(dryWet.getParamID())->load() / 100.0f);
@@ -167,7 +170,9 @@ void AudioPluginAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     chorusModule.process(buffer);
 
     // 7. Stereo widener
-    stereoWidener.setWidth(apvts.getRawParameterValue(stereo.getParamID())->load());
+    // stereo APVTS stores degrees (0–120). Convert to internal width (0–1):
+    //   0°  = mono (width 0.0), 120° = unchanged stereo (width 1.0).
+    stereoWidener.setWidth(apvts.getRawParameterValue(stereo.getParamID())->load() / 120.0f);
     stereoWidener.process(buffer);
 
     // 8. Dry/wet mix

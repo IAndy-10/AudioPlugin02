@@ -19,6 +19,11 @@ void CrossoverFilter::setDamping(float d) {
     updateCoeff();
 }
 
+void CrossoverFilter::setFilterType(bool shelving) {
+    useShelving = shelving;
+    // coeff is shared; no coefficient recomputation needed.
+}
+
 void CrossoverFilter::reset() { z1 = 0.0; }
 
 void CrossoverFilter::updateCoeff() {
@@ -33,7 +38,18 @@ void CrossoverFilter::updateCoeff() {
 }
 
 float CrossoverFilter::processSample(float in) {
-    // One-pole LP: y[n] = coeff * x[n] + (1-coeff) * y[n-1]
+    // Update one-pole LP state (shared by both modes).
     z1 = coeff * static_cast<double>(in) + (1.0 - coeff) * z1;
+
+    if (useShelving) {
+        // High-shelf mode: reduce HF above corner, pass LF fully.
+        // y[n] = SHELF_GAIN * x[n] + (1 - SHELF_GAIN) * z1_lp
+        // At DC:     z1 ≈ in  → y ≈ in           (full LF pass)
+        // At Nyquist: z1 ≈ 0  → y ≈ SHELF_GAIN*in (HF reduced by SHELF_GAIN, ≈ -6 dB)
+        // Damping parameter has no effect in this mode.
+        return static_cast<float>(SHELF_GAIN * static_cast<double>(in) + (1.0 - SHELF_GAIN) * z1);
+    }
+
+    // LP mode (default): y[n] = coeff * x[n] + (1-coeff) * y[n-1]
     return static_cast<float>(z1);
 }

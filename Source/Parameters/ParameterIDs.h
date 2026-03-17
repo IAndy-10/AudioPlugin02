@@ -1,3 +1,4 @@
+// ParameterIDs.h
 #pragma once
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -7,6 +8,7 @@ namespace PluginParamIDs {
     const juce::ParameterID hiCutEnabled { "hiCutEnabled", 1 };
     const juce::ParameterID loCutFreq    { "loCutFreq",    1 };
     const juce::ParameterID hiCutFreq    { "hiCutFreq",    1 };
+    const juce::ParameterID hiCutQ       { "hiCutQ",       1 };
 
     // Early Reflections
     const juce::ParameterID erEnabled { "erEnabled", 1 };
@@ -32,12 +34,17 @@ namespace PluginParamIDs {
     const juce::ParameterID diffuseGain  { "diffuseGain",  1 };
     const juce::ParameterID dryWet       { "dryWet",       1 };
 
-    // Bottom Utility Row
-    const juce::ParameterID predelay { "predelay", 1 };
-    const juce::ParameterID smooth   { "smooth",   1 };
-    const juce::ParameterID size     { "size",     1 };
-    const juce::ParameterID freeze   { "freeze",   1 };
-    const juce::ParameterID flatCut  { "flatCut",  1 };
-    const juce::ParameterID stereo   { "stereo",   1 };
-    const juce::ParameterID density  { "density",  1 };
+    // Bottom Utility Row / Decay Section
+    const juce::ParameterID predelay    { "predelay",    1 };
+    const juce::ParameterID smooth      { "smooth",      1 };
+    const juce::ParameterID size        { "size",        1 };
+    const juce::ParameterID freeze      { "freeze",      1 };
+    const juce::ParameterID flatEnabled { "flatEnabled", 1 }; // replaces flatCut (Int 0-1)
+    const juce::ParameterID cutEnabled  { "cutEnabled",  1 }; // replaces flatCut (Int 0-1)
+    const juce::ParameterID stereo      { "stereo",      1 };
+    const juce::ParameterID density     { "density",     1 };
+
+    // FDN high-frequency filter mode
+    // false = one-pole low-pass (original), true = first-order high shelf
+    const juce::ParameterID highFilterType { "highFilterType", 1 };
 }

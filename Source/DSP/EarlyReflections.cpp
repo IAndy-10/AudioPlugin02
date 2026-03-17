@@ -48,10 +48,11 @@ void EarlyReflections::process(juce::AudioBuffer<float>& buffer) {
             delayR[t].write(inR);
         }
 
-        // Accumulate taps
+        // Accumulate taps — blend between gradual and rapid gain profiles via shape.
         float erL = 0.0f, erR = 0.0f;
         for (int t = 0; t < NUM_TAPS; ++t) {
-            float g = TAP_GAINS[t] * amount;
+            float g = TAP_GAINS_GRADUAL[t] + shape * (TAP_GAINS_RAPID[t] - TAP_GAINS_GRADUAL[t]);
+            g *= amount;
             erL += delayL[t].read(tapL[t]) * g;
             erR += delayR[t].read(tapR[t]) * g;
         }

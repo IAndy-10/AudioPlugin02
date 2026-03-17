@@ -1,55 +1,68 @@
-import { writable } from 'svelte/store';
-import type { ParameterState } from '../types/parameters';
+import { writable, derived } from 'svelte/store';
+import type { ParameterId } from '../types/parameters';
 
-// All values are normalized 0-1 (JUCE param->getValue() range).
-const initialState: ParameterState = {
+// Per-parameter writable stores (normalized 0-1).
+// Each store is independent — updating one param only notifies its own subscribers.
+export const params = {
     // Input Filter
-    loCutEnabled: { id: 'loCutEnabled', name: 'Lo Cut',      value: 0,    min: 0, max: 1, defaultValue: 0 },
-    hiCutEnabled: { id: 'hiCutEnabled', name: 'Hi Cut',      value: 0,    min: 0, max: 1, defaultValue: 0 },
-    loCutFreq:    { id: 'loCutFreq',    name: 'Lo Cut Freq', value: 0.35, min: 0, max: 1, defaultValue: 0.35 },
-    hiCutFreq:    { id: 'hiCutFreq',    name: 'Hi Cut Freq', value: 0.42, min: 0, max: 1, defaultValue: 0.42 },
+    loCutEnabled: writable(0),
+    hiCutEnabled: writable(0),
+    loCutFreq:    writable(0.35),
+    hiCutFreq:    writable(0.42),
 
     // Early Reflections
-    erEnabled: { id: 'erEnabled', name: 'Spin',   value: 0,   min: 0, max: 1, defaultValue: 0 },
-    erAmount:  { id: 'erAmount',  name: 'Amount', value: 0.3, min: 0, max: 1, defaultValue: 0.3 },
-    erRate:    { id: 'erRate',    name: 'Rate',   value: 0.3, min: 0, max: 1, defaultValue: 0.3 },
-    erShape:   { id: 'erShape',   name: 'Shape',  value: 0.5, min: 0, max: 1, defaultValue: 0.5 },
+    erEnabled: writable(0),
+    erAmount:  writable(0.3),
+    erRate:    writable(0.3),
+    erShape:   writable(0.5),
 
     // FDN Core
-    reverbMode:    { id: 'reverbMode',    name: 'Mode',      value: 0,    min: 0, max: 1, defaultValue: 0 },
-    crossoverFreq: { id: 'crossoverFreq', name: 'Crossover', value: 0.5,  min: 0, max: 1, defaultValue: 0.5 },
-    diffusion:     { id: 'diffusion',     name: 'Diffusion', value: 0.6,  min: 0, max: 1, defaultValue: 0.6 },
-    scale:         { id: 'scale',         name: 'Scale',     value: 0.5,  min: 0, max: 1, defaultValue: 0.5 },
-    decay:         { id: 'decay',         name: 'Decay',     value: 0.42, min: 0, max: 1, defaultValue: 0.42 },
-    damping:       { id: 'damping',       name: 'Damping',   value: 0.5,  min: 0, max: 1, defaultValue: 0.5 },
-    feedback:      { id: 'feedback',      name: 'Feedback',  value: 0.75, min: 0, max: 1, defaultValue: 0.75 },
+    reverbMode:    writable(0),
+    crossoverFreq: writable(0.5),
+    diffusion:     writable(0.6),
+    scale:         writable(0.5),
+    decay:         writable(0.42),
+    damping:       writable(0.5),
+    feedback:      writable(0.75),
 
     // Chorus
-    chorusAmount: { id: 'chorusAmount', name: 'Amount', value: 0.2,  min: 0, max: 1, defaultValue: 0.2 },
-    chorusRate:   { id: 'chorusRate',   name: 'Rate',   value: 0.27, min: 0, max: 1, defaultValue: 0.27 },
+    choEnable:    writable(0),
+    chorusAmount: writable(0.2),
+    chorusRate:   writable(0.27),
 
     // Output
-    reflectGain: { id: 'reflectGain', name: 'Reflect', value: 0.8, min: 0, max: 1, defaultValue: 0.8 },
-    diffuseGain: { id: 'diffuseGain', name: 'Diffuse', value: 0.8, min: 0, max: 1, defaultValue: 0.8 },
-    dryWet:      { id: 'dryWet',      name: 'Dry/Wet', value: 0.5, min: 0, max: 1, defaultValue: 0.5 },
+    reflectGain: writable(0.8),
+    diffuseGain: writable(0.8),
+    dryWet:      writable(0.5),
 
     // Bottom Utility Row
-    predelay: { id: 'predelay', name: 'Predelay', value: 0.08, min: 0, max: 1, defaultValue: 0.08 },
-    smooth:   { id: 'smooth',   name: 'Smooth',   value: 0,    min: 0, max: 1, defaultValue: 0 },
-    size:     { id: 'size',     name: 'Size',      value: 0.5,  min: 0, max: 1, defaultValue: 0.5 },
-    freeze:   { id: 'freeze',   name: 'Freeze',    value: 0,    min: 0, max: 1, defaultValue: 0 },
-    flatCut:  { id: 'flatCut',  name: 'Flat/Cut',  value: 0,    min: 0, max: 1, defaultValue: 0 },
-    stereo:   { id: 'stereo',   name: 'Stereo',    value: 0.5,  min: 0, max: 1, defaultValue: 0.5 },
-    density:  { id: 'density',  name: 'Density',   value: 0.33, min: 0, max: 1, defaultValue: 0.33 },
+    predelay: writable(0.08),
+    smooth:   writable(0),
+    size:     writable(0.5),
+    freeze:   writable(0),
+    flatCut:  writable(0),
+    stereo:   writable(0.5),
+    density:  writable(0.33),
 };
 
-export const store = writable<ParameterState>(initialState);
+export function setParameterValue(id: ParameterId, value: number) {
+    params[id].set(value);
+}
 
-export const setParameterValue = (id: keyof ParameterState, value: number) => {
-    store.update(state => {
-        if (state[id]) {
-            return { ...state, [id]: { ...state[id], value } };
-        }
-        return state;
-    });
-};
+// Selector indices — only recompute when their own param changes
+export const modeSelected    = derived(params.reverbMode, $v => Math.round($v));
+export const smoothSelected  = derived(params.smooth,     $v => Math.round($v * 3));
+export const densitySelected = derived(params.density,    $v => Math.round($v * 3));
+export const flatCutSelected = derived(params.flatCut,    $v => Math.round($v));
+
+// Display values — only recompute when their own param changes
+export const loCutHz     = derived(params.loCutFreq,     $v => Math.round(20 + $v * 480));
+export const hiCutHz     = derived(params.hiCutFreq,     $v => Math.round(1000 + $v * 19000));
+export const crossoverHz = derived(params.crossoverFreq, $v => (200 + $v * 7800).toFixed(0));
+export const diffusionPct = derived(params.diffusion,    $v => ($v * 100).toFixed(0));
+
+// SVG node positions — only recompute when their own param changes
+export const svgNode1X = derived(params.crossoverFreq, $v => 80  + $v * 40);
+export const svgNode1Y = derived(params.damping,       $v => 15  + $v * 40);
+export const svgNode2X = derived(params.feedback,      $v => 140 + $v * 30);
+export const svgNode2Y = derived(params.diffusion,     $v => 40  + $v * 20);

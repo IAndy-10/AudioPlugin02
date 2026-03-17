@@ -21,6 +21,11 @@ void InputFilter::setHiCutFreq(float hz) {
     updateLP();
 }
 
+void InputFilter::setHiCutQ(float q) {
+    hiCutQVal = q;
+    updateLP();
+}
+
 void InputFilter::setLoCutEnabled(bool on) { loCutOn = on; }
 void InputFilter::setHiCutEnabled(bool on) { hiCutOn = on; }
 
@@ -46,12 +51,12 @@ void InputFilter::updateHP() {
     hp_a2 = (1.0 - alpha) / a0;
 }
 
-// Butterworth 2nd-order low-pass biquad
+// 2nd-order low-pass biquad with variable Q
 void InputFilter::updateLP() {
     double omega = 2.0 * kPi * static_cast<double>(hiCutHz) / sr;
     double cos_w = std::cos(omega);
     double sin_w = std::sin(omega);
-    double alpha = sin_w / (2.0 * kSqrt2Inv);
+    double alpha = sin_w / (2.0 * static_cast<double>(hiCutQVal));
 
     double a0 = 1.0 + alpha;
     lp_b0 = (1.0 - cos_w) / (2.0 * a0);
@@ -65,11 +70,21 @@ void InputFilter::processChannel(float* data, int numSamples,
                                   double b0, double b1, double b2,
                                   double a1, double a2,
                                   double& z1, double& z2) {
+    // ScopedNoDenormals (set in processBlock) handles SSE FTZ for floats.
+    // For double-precision state vars we add an explicit sub-denormal guard:
+    // values below ~1e-15 are vanishingly small and safe to zero.
+    static constexpr double kDenormalFloor = 1.0e-15;
+
     for (int i = 0; i < numSamples; ++i) {
         double in  = static_cast<double>(data[i]);
         double out = b0 * in + z1;
         z1 = b1 * in - a1 * out + z2;
         z2 = b2 * in - a2 * out;
+
+        // Flush near-zero state to prevent denormal CPU stalls on quiet tails.
+        if (z1 < kDenormalFloor && z1 > -kDenormalFloor) z1 = 0.0;
+        if (z2 < kDenormalFloor && z2 > -kDenormalFloor) z2 = 0.0;
+
         data[i] = static_cast<float>(out);
     }
 }

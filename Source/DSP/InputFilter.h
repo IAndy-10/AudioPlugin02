@@ -9,6 +9,7 @@ public:
 
     void setLoCutFreq(float hz);    // High-pass frequency
     void setHiCutFreq(float hz);    // Low-pass frequency
+    void setHiCutQ(float q);        // Low-pass resonance Q (default 0.7071 = Butterworth)
     void setLoCutEnabled(bool on);
     void setHiCutEnabled(bool on);
 
@@ -25,10 +26,11 @@ private:
                         double& z1, double& z2);
 
     double sr = 44100.0;
-    float  loCutHz = 80.0f;
-    float  hiCutHz = 8000.0f;
-    bool   loCutOn = false;
-    bool   hiCutOn = false;
+    float  loCutHz  = 80.0f;
+    float  hiCutHz  = 8000.0f;
+    float  hiCutQVal = 0.7071f;    // default: Butterworth
+    bool   loCutOn  = false;
+    bool   hiCutOn  = false;
 
     // HP biquad coefficients (Lo Cut)
     double hp_b0 = 1, hp_b1 = 0, hp_b2 = 0, hp_a1 = 0, hp_a2 = 0;

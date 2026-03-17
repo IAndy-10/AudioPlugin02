@@ -17,13 +17,14 @@ public:
     void prepare(double sampleRate);
 
     void setDecayMs(float ms);
-    void setDamping(float d);       // 0-1
-    void setDiffusion(float d);     // 0-1
-    void setSize(float s);          // 0-1: scales delay lengths
+    void setDamping(float d);           // 0-1
+    void setDiffusion(float d);         // 0-1
+    void setSize(float s);              // 0-1: scales delay lengths
     void setCrossoverFreq(float hz);
-    void setFeedback(float fb);     // 0-1 (additional feedback scaling)
+    void setFeedback(float fb);         // 0-1 (additional feedback scaling)
     void setFrozen(bool frozen);
-    void setReverbMode(int mode);   // 0=High, 1=Low
+    void setReverbMode(int mode);       // 0=High, 1=Low
+    void setHighFilterType(bool shelving); // false=LP (default), true=high shelf
 
     void process(juce::AudioBuffer<float>& buffer);
     void reset();

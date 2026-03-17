@@ -32,6 +32,6 @@ Thumbs.db
 *.aaxplugin
 
 # Documentation
-*.md
-/docs
+# *.md
+# /docs
 
