@@ -12,7 +12,7 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor(AudioPluginAudi
         onParameterChangedFromJS(paramId, value);
     });
 
-    setSize(1260, 900);
+    setSize(1260, 700);
     setResizable(true, true); 
     setResizeLimits(450, 280, 1800, 1120);
 

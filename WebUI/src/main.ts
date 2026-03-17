@@ -1,4 +1,5 @@
 import './index.css';
+import './app.css';
 import App from './App.svelte';
 import './bridge/bridge';
 

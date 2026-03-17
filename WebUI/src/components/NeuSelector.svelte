@@ -7,9 +7,9 @@
 
   const dispatch = createEventDispatcher();
 
+  // 1c: parent owns state — do NOT mutate selected prop here
   function select(i) {
-    selected = i;
-    dispatch('change', { selected });
+    dispatch('change', { selected: i });
   }
 </script>
 
@@ -20,6 +20,7 @@
       <button
         class="opt"
         class:active={selected === i}
+        aria-pressed={selected === i}
         on:click={() => select(i)}
       >{opt}</button>
     {/each}
@@ -27,8 +28,6 @@
 </div>
 
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@200;300;400&display=swap');
-
   .wrap {
     display: flex;
     flex-direction: column;

@@ -14,6 +14,8 @@
     import FilterGraph      from './components/FilterGraph.svelte';
     import NeuDiffusionNetworkGraph from './components/NeuDiffusionNetworkGraph.svelte';
     import NeuKnobDiscrete  from './components/NeuKnobDiscrete.svelte';
+    import Tooltip          from './components/Tooltip.svelte';
+    import { formatTime }   from './utils/format';
 
     const {
         erEnabled, erAmount, erRate, erShape,
@@ -27,9 +29,12 @@
 
     // ── Local UI state ────────────────────────────────────────
     let activeBand: 'low' | 'high' = 'low';
+    let bypassed = false;  // 2a: master bypass
 
     // ── Bridge helpers ────────────────────────────────────────
+    // 5d: NaN guard — every send() call is protected
     function send(id: ParameterId, value: number) {
+        if (!isFinite(value) || isNaN(value)) return;
         setParameterValue(id, value);
         bridge.sendParameterChange(id, value);
     }
@@ -51,10 +56,30 @@
         <div class="plugin-title">
             <span class="title-main">Audio Plugin 02</span>
         </div>
+        <!-- 2a: Master bypass -->
+        <div class="top-bar-right">
+            <NeuButton
+                label="BYPASS"
+                icon="⏻"
+                active={bypassed}
+                pill
+                glow
+                on:change={e => {
+                    bypassed = e.detail.active;
+                    bridge.sendParameterChange('bypass' as ParameterId, bypassed ? 1 : 0);
+                }}
+            />
+        </div>
     </div>
 
+    <!-- 2a: Bypassed overlay banner -->
+    {#if bypassed}
+        <div class="bypass-banner">BYPASSED</div>
+    {/if}
+
     <!-- ========== MAIN PANELS ========== -->
-    <div class="panels-row">
+    <!-- 2a: dim entire panel area when bypassed -->
+    <div class="panels-row" class:bypassed>
 
         <!-- ===== PANEL 1: INPUT ===== -->
         <section class="panel panel-input">
@@ -177,12 +202,15 @@
                         min={0} max={100} step={1} unit="%" decimals={1}
                         on:change={e => send('diffusion', e.detail.value / 100)}
                     />
-                    <NeuNumber label="Scale"
-                        value={+($scale * 100).toFixed(1)}
-                        min={0} max={100} step={1} unit="%" decimals={1}
-                        on:change={e => send('scale', e.detail.value / 100)}
-                    />
-                    <!-- ⚠ Scale: registered in APVTS, unconnected to DSP -->
+                    <!-- TODO: wire DSP -->
+                    <!-- 1d: Scale unimplemented — dimmed, non-interactive -->
+                    <div class="unimplemented" title="Coming soon">
+                        <NeuNumber label="Scale"
+                            value={+($scale * 100).toFixed(1)}
+                            min={0} max={100} step={1} unit="%" decimals={1}
+                            on:change={e => send('scale', e.detail.value / 100)}
+                        />
+                    </div>
                     <NeuNumber label="Diffuse"
                         value={+(-30 + 36 * $diffuseGain).toFixed(1)}
                         min={-30} max={6} step={0.5} unit=" dB" decimals={1}
@@ -196,9 +224,11 @@
                     <div class="subsection-col">
                         <div class="subsection-label">Chorus</div>
                         <div class="row" style="gap:8px;">
+                            <!-- 4d: LED dot gives clear on/off state -->
                             <NeuButton label="On"
                                 active={$chorusEnabled > 0.5}
                                 icon=":)"
+                                led
                                 on:change={e => sendBool('chorusEnabled', e.detail.active)}
                             />
                             <div class="col">
@@ -240,29 +270,42 @@
             <div class="panel-title">Decay</div>
             <div class="panel-body">
 
-                <NeuKnob label="Decay" value={$decay} min={200} max={60000} unit=" ms"
-                    on:change={e => send('decay', e.detail.value)} />
+                <!-- 3b: adaptive units: below 1000 ms → "XXX ms", above → "X.XX s" -->
+                <NeuKnob
+                    label="Decay"
+                    value={$decay}
+                    min={200} max={60000}
+                    formatFn={v => formatTime(v)}
+                    on:change={e => send('decay', e.detail.value)}
+                />
 
                 <div class="subsection-label">Mode</div>
                 <div class="triangle-group">
-                    <NeuButton
+                    <!-- 2b: glow + pulse icon when frozen -->
+                <NeuButton
                         label="Freeze"
                         active={$freeze > 0.5}
                         icon="❄"
+                        glow
                         on:change={e => sendBool('freeze', e.detail.active)}
                     />
                     <div class="triangle-top">
-                        <NeuButton label="Flat"
-                            active={$flatEnabled > 0.5}
-                            on:change={e => sendBool('flatEnabled', e.detail.active)}
-                        />
-                        <NeuButton label="Cut"
-                            active={$cutEnabled > 0.5}
-                            on:change={e => sendBool('cutEnabled', e.detail.active)}
-                        />
+                        <!-- TODO: wire DSP -->
+                        <!-- 1d: Flat/Cut unimplemented — dimmed, non-interactive -->
+                        <div class="unimplemented" title="Coming soon">
+                            <NeuButton label="Flat"
+                                active={$flatEnabled > 0.5}
+                                on:change={e => sendBool('flatEnabled', e.detail.active)}
+                            />
+                        </div>
+                        <div class="unimplemented" title="Coming soon">
+                            <NeuButton label="Cut"
+                                active={$cutEnabled > 0.5}
+                                on:change={e => sendBool('cutEnabled', e.detail.active)}
+                            />
+                        </div>
                     </div>
                 </div>
-                <!-- ⚠ Flat / Cut: registered in APVTS but DSP wiring pending. -->
 
             </div>
         </section>
@@ -282,8 +325,17 @@
                 <NeuKnob label="Stereo" value={$stereo} min={0} max={120} unit="°"
                     on:change={e => send('stereo', e.detail.value)} />
 
-                <NeuKnob label="Dry/Wet" value={$dryWet} min={0} max={100} unit="%"
-                    on:change={e => send('dryWet', e.detail.value)} />
+                <!-- 3a: Dry/Wet is the primary output control — larger, prominent -->
+                <NeuKnob
+                    label="Dry/Wet"
+                    value={$dryWet}
+                    min={0} max={100} unit="%"
+                    size="large"
+                    prominent
+                    showTick
+                    defaultValue={0.5}
+                    on:change={e => send('dryWet', e.detail.value)}
+                />
 
             </div>
         </section>
@@ -292,8 +344,11 @@
 
 </main>
 
+<!-- 4b: Global tooltip — mounted once, reads from tooltipStore -->
+<Tooltip />
+
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,200;0,300;0,400&family=DM+Serif+Display&display=swap');
+    /* 5e: Font import moved to app.css / main.ts — not duplicated here */
 
     :global(body) {
         margin: 0;
@@ -315,6 +370,7 @@
     /* ── Top bar ── */
     .top-bar {
         display: flex;
+        justify-content: space-between;
         align-items: center;
         padding: 10px 20px 8px;
         border-bottom: 1px solid rgba(150,130,100,0.15);
@@ -326,6 +382,24 @@
         letter-spacing: 0.12em;
         color: rgba(110, 88, 60, 0.85);
     }
+    /* 2a: right side of top bar */
+    .top-bar-right { display: flex; align-items: center; }
+
+    /* 2a: bypass banner */
+    .bypass-banner {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 500;
+        font-family: 'DM Sans', sans-serif;
+        font-size: 1.4rem;
+        font-weight: 200;
+        letter-spacing: 0.5em;
+        color: #00c8b4;
+        pointer-events: none;
+        text-shadow: 0 0 20px rgba(0,200,180,0.4);
+    }
 
     /* ── Panels ── */
     .panels-row {
@@ -334,6 +408,17 @@
         padding: 12px 12px 8px;
         align-items: stretch;
         overflow: hidden;
+        transition: opacity 0.2s ease;
+    }
+
+    /* 2a: dim panels when bypassed */
+    .panels-row.bypassed { opacity: 0.5; pointer-events: none; }
+
+    /* 1d: unimplemented parameter wrapper */
+    .unimplemented {
+        opacity: 0.35;
+        pointer-events: none;
+        position: relative;
     }
 
     .panel {

@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
   import { onMount } from 'svelte';
   import { params, toNormalized } from '../state/store';
   import { bridge } from '../bridge/bridge';
@@ -84,6 +84,24 @@
     const v   = getVals();
     const n1  = getN1(v);
     const n2  = getN2(v);
+
+    // 3d: Axis labels — drawn first so they sit behind the curve
+    ctx.font = '7px "DM Sans", sans-serif';
+    ctx.fillStyle = 'rgba(200,200,200,0.25)';
+
+    // X-axis: frequency markers
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    for (const [f, lbl] of [[200, '200'], [1000, '1k'], [4000, '4k'], [8000, '8k']]) {
+      ctx.fillText(lbl, freqToX(f), CH - 1);
+    }
+
+    // Y-axis: + at top, − at bottom
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText('+', MX, MY);
+    ctx.textBaseline = 'bottom';
+    ctx.fillText('−', MX, CH - MY);
 
     const n1Alpha = activeBand === 'high' ? 0.4 : 1.0;
     const n2Alpha = activeBand === 'low'  ? 0.4 : 1.0;

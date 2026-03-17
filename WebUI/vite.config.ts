@@ -16,7 +16,4 @@ export default defineConfig({
     server: {
         middlewareMode: false,
     },
-    optimizeDeps: {
-        include: ['svelte'],
-    },
 });

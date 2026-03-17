@@ -1,0 +1,7 @@
+/* Global styles — imported once in main.ts */
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,200;0,300;0,400&family=DM+Serif+Display&display=swap');
+
+/* Prevent layout shifts when numeric values change */
+* {
+    font-variant-numeric: tabular-nums;
+}
