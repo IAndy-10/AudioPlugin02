@@ -3,27 +3,31 @@
   import NeuNumber from './NeuNumber.svelte';
   import NeuButton from './NeuButton.svelte';
 
-  export let freq   = 1000;        // center frequency, Hz (50–18000)
-  export let q      = 1.0;         // Q factor (0.5–9.0)
-  export let loCut  = false;       // high-pass toggle
-  export let hiCut  = false;       // low-pass toggle
-  export let highFilterType = false; // false = LP, true = Shelf
+  // Props — all in display units (Hz / Q), normalization done by parent
+  export let loCutFreq = 200;    // Hz (50–18000)
+  export let hiCutFreq = 8000;   // Hz (50–18000)
+  export let q         = 1.0;    // Q factor (0.5–9.0)
+  export let loCut     = false;  // high-pass enable
+  export let hiCut     = false;  // low-pass enable
 
   const dispatch = createEventDispatcher();
 
   // ── Canvas constants ───────────────────────────────────────
   const CW = 300, CH = 110;
-  const MX = 6, MY = 8;             // x / y margins
+  const MX = 6,  MY = 8;
   const FMIN = 50, FMAX = 18000;
   const QMIN = 0.5, QMAX = 9.0;
-  const LOCUT_FC = 100;             // fixed Lo Cut corner (Hz)
-  const HICUT_FC = 8000;            // fixed Hi Cut corner (Hz)
-  const DB_TOP   = 6;               // +6 dB headroom at canvas top
-  const DB_BOT   = -48;             // noise floor at canvas bottom
+  const DB_TOP = 6, DB_BOT = -48;
 
   let canvas;
+  let dragging = false;
+  let dragStartClientX, dragStartClientY;
+  let dragStartActiveFreq, dragStartQ;
 
-  // ── Frequency ↔ canvas-X (log scale) ──────────────────────
+  // The active handle tracks whichever band is being edited
+  $: activeFreq = (loCut && !hiCut) ? loCutFreq : hiCutFreq;
+
+  // ── Frequency ↔ X (log scale) ─────────────────────────────
   function freqToX(f) {
     return MX + (CW - 2 * MX) * Math.log10(f / FMIN) / Math.log10(FMAX / FMIN);
   }
@@ -32,14 +36,14 @@
     return FMIN * Math.pow(FMAX / FMIN, norm);
   }
 
-  // ── Magnitude → canvas-Y (dB scale) ──────────────────────
+  // ── Magnitude → Y (dB scale) ──────────────────────────────
   function magToY(mag) {
     const db = 20 * Math.log10(Math.max(mag, 1e-6));
     const clamped = Math.max(DB_BOT, Math.min(DB_TOP, db));
     return CH - MY - ((clamped - DB_BOT) / (DB_TOP - DB_BOT)) * (CH - 2 * MY);
   }
 
-  // ── Q ↔ canvas-Y (log scale) ──────────────────────────────
+  // ── Q ↔ Y (log scale) ─────────────────────────────────────
   function qToY(qv) {
     const norm = (Math.log(qv) - Math.log(QMIN)) / (Math.log(QMAX) - Math.log(QMIN));
     return MY + (1 - norm) * (CH - 2 * MY);
@@ -49,18 +53,14 @@
     return Math.exp(norm * (Math.log(QMAX) - Math.log(QMIN)) + Math.log(QMIN));
   }
 
-  // ── Filter transfer functions (linear magnitude) ──────────
-  function bpMag(f) {
-    const r = f / freq;
-    return 1 / Math.sqrt(1 + q * q * (r - 1 / r) * (r - 1 / r));
-  }
+  // ── Filter transfer functions ──────────────────────────────
   function hpMag(f) {
-    const r = f / LOCUT_FC;
+    const r = f / loCutFreq;
     return (r * r) / Math.sqrt(1 + r * r * r * r);
   }
   function lpMag(f) {
-    const r = f / HICUT_FC;
-    return 1 / Math.sqrt((1 - r*r)*(1 - r*r) + (r/q)*(r/q));
+    const r = f / hiCutFreq;
+    return 1 / Math.sqrt((1 - r * r) * (1 - r * r) + (r / q) * (r / q));
   }
 
   // ── Draw ──────────────────────────────────────────────────
@@ -68,124 +68,90 @@
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
 
+    // Background
     ctx.fillStyle = '#1a1a1a';
     ctx.fillRect(0, 0, CW, CH);
 
+    // Grid
     ctx.lineWidth = 0.5;
     ctx.strokeStyle = 'rgba(255,255,255,0.06)';
     for (const gf of [50, 100, 200, 500, 1000, 2000, 5000, 10000]) {
       const gx = freqToX(gf);
-      ctx.beginPath();
-      ctx.moveTo(gx, 0);
-      ctx.lineTo(gx, CH);
-      ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, CH); ctx.stroke();
     }
     ctx.strokeStyle = 'rgba(255,255,255,0.04)';
-    ctx.beginPath();
-    ctx.moveTo(0, CH / 2);
-    ctx.lineTo(CW, CH / 2);
-    ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, CH / 2); ctx.lineTo(CW, CH / 2); ctx.stroke();
 
+    // Magnitude curve
     const pts = [];
     for (let px = 0; px <= CW; px++) {
       const f = xToFreq(px);
       if (f < FMIN || f > FMAX) continue;
       let mag;
-      if      (!loCut && !hiCut)  mag = bpMag(f);
-      else if ( loCut && !hiCut)  mag = hpMag(f);
-      else if (!loCut &&  hiCut)  mag = lpMag(f);
-      else                        mag = bpMag(f) * hpMag(f) * lpMag(f);
+      if      (!loCut && !hiCut) mag = 1.0;
+      else if ( loCut && !hiCut) mag = hpMag(f);
+      else if (!loCut &&  hiCut) mag = lpMag(f);
+      else                       mag = hpMag(f) * lpMag(f);
       pts.push([px, magToY(mag)]);
     }
 
     ctx.beginPath();
     pts.forEach(([px, py], i) => i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py));
-    ctx.lineTo(CW, CH);
-    ctx.lineTo(0, CH);
-    ctx.closePath();
+    ctx.lineTo(CW, CH); ctx.lineTo(0, CH); ctx.closePath();
     ctx.fillStyle = 'rgba(0,200,180,0.09)';
     ctx.fill();
 
     ctx.beginPath();
     pts.forEach(([px, py], i) => i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py));
     ctx.strokeStyle = '#00c8b4';
-    ctx.lineWidth = 1.8;
-    ctx.lineJoin = 'round';
-    ctx.stroke();
+    ctx.lineWidth = 1.8; ctx.lineJoin = 'round'; ctx.stroke();
 
-    // ── Draggable handle ─────────────────────────────────────
-    const hx = freqToX(freq);
+    // ── Active handle ─────────────────────────────────────
+    const hx = freqToX(activeFreq);
     const hy = qToY(q);
 
-    ctx.beginPath();
-    ctx.moveTo(hx, MY);
-    ctx.lineTo(hx, hy - 6.5);
-    ctx.strokeStyle = 'rgba(245,166,35,0.13)';
-    ctx.lineWidth = 0.8;
-    ctx.setLineDash([2, 3]);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(hx, hy + 6.5);
-    ctx.lineTo(hx, CH - MY);
-    ctx.strokeStyle = 'rgba(245,166,35,0.13)';
-    ctx.stroke();
-    ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(hx, MY); ctx.lineTo(hx, hy - 6.5);
+    ctx.strokeStyle = 'rgba(245,166,35,0.13)'; ctx.lineWidth = 0.8;
+    ctx.setLineDash([2, 3]); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(hx, hy + 6.5); ctx.lineTo(hx, CH - MY);
+    ctx.stroke(); ctx.setLineDash([]);
 
-    ctx.beginPath();
-    ctx.arc(hx, hy, 5.5, 0, Math.PI * 2);
-    ctx.fillStyle = dragging ? '#ffb940' : '#f5a623';
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(hx, hy, 5.5, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(255,220,100,0.4)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
+    ctx.beginPath(); ctx.arc(hx, hy, 5.5, 0, Math.PI * 2);
+    ctx.fillStyle = dragging ? '#ffb940' : '#f5a623'; ctx.fill();
+    ctx.beginPath(); ctx.arc(hx, hy, 5.5, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(255,220,100,0.4)'; ctx.lineWidth = 1; ctx.stroke();
 
-    const freqLabel = freq >= 1000
-      ? (freq / 1000).toFixed(freq % 1000 === 0 ? 0 : 1) + 'k'
-      : Math.round(freq).toString();
+    // Freq label at bottom of handle
+    const freqLabel = activeFreq >= 1000
+      ? (activeFreq / 1000).toFixed(activeFreq % 1000 === 0 ? 0 : 1) + 'k'
+      : Math.round(activeFreq).toString();
     ctx.font = '8px "DM Sans", sans-serif';
     ctx.fillStyle = 'rgba(245,166,35,0.5)';
-    ctx.textAlign = 'center';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
     ctx.fillText(freqLabel, hx, CH - 1);
-
-    // ── highFilterType indicator (top-right corner) ───────────
-    const modeLabel = highFilterType ? 'SH' : 'LP';
-    ctx.font = 'bold 8px "DM Sans", sans-serif';
-    ctx.fillStyle = highFilterType
-      ? 'rgba(245,180,50,0.65)'
-      : 'rgba(0,200,180,0.45)';
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'top';
-    ctx.fillText(modeLabel, CW - MX - 2, MY);
-    ctx.textBaseline = 'alphabetic';
   }
 
-  $: if (canvas) { freq; q; loCut; hiCut; highFilterType; draw(); }
+  $: if (canvas) { loCutFreq; hiCutFreq; q; loCut; hiCut; draw(); }
   onMount(() => draw());
 
-  // ── Drag logic ────────────────────────────────────────────
-  let dragging = false;
-  let dragStartClientX, dragStartClientY;
-  let dragStartFreq, dragStartQ;
-
+  // ── Drag ──────────────────────────────────────────────────
   function onCanvasMouseDown(e) {
     const rect = canvas.getBoundingClientRect();
     const scaleX = CW / rect.width;
     const scaleY = CH / rect.height;
     const mx = (e.clientX - rect.left) * scaleX;
-    const my = (e.clientY - rect.top) * scaleY;
-    const hx = freqToX(freq);
+    const my = (e.clientY - rect.top)  * scaleY;
+    const hx = freqToX(activeFreq);
     const hy = qToY(q);
 
     if (Math.hypot(mx - hx, my - hy) < 16) {
       dragging = true;
-      dragStartClientX = e.clientX;
-      dragStartClientY = e.clientY;
-      dragStartFreq = freq;
+      dragStartClientX   = e.clientX;
+      dragStartClientY   = e.clientY;
+      dragStartActiveFreq = activeFreq;
       dragStartQ = q;
       window.addEventListener('mousemove', onDragMove);
-      window.addEventListener('mouseup', onDragUp);
+      window.addEventListener('mouseup',   onDragUp);
     }
   }
 
@@ -195,95 +161,75 @@
     const scaleX = CW / rect.width;
     const scaleY = CH / rect.height;
 
-    const startCanvasX = freqToX(dragStartFreq);
     const dx = (e.clientX - dragStartClientX) * scaleX;
-    freq = Math.min(FMAX, Math.max(FMIN, xToFreq(startCanvasX + dx)));
+    const newFreq = Math.min(FMAX, Math.max(FMIN,
+      xToFreq(freqToX(dragStartActiveFreq) + dx)));
 
-    const startCanvasY = qToY(dragStartQ);
+    if (loCut && !hiCut) loCutFreq = newFreq;
+    else                 hiCutFreq = newFreq;
+
     const dy = (e.clientY - dragStartClientY) * scaleY;
-    q = yToQ(startCanvasY + dy);
+    q = yToQ(qToY(dragStartQ) + dy);
 
     draw();
-    dispatch('change', { freq, q, loCut, hiCut });
+    dispatch('change', { loCutFreq, hiCutFreq, q, loCut, hiCut });
   }
 
   function onDragUp() {
     dragging = false;
     draw();
     window.removeEventListener('mousemove', onDragMove);
-    window.removeEventListener('mouseup', onDragUp);
+    window.removeEventListener('mouseup',   onDragUp);
   }
 
-  // ── Toggle handlers ───────────────────────────────────────
-  function toggleLoCut() {
-    loCut = !loCut;
-    dispatch('change', { freq, q, loCut, hiCut });
-  }
-  function toggleHiCut() {
-    hiCut = !hiCut;
-    dispatch('change', { freq, q, loCut, hiCut });
-  }
-
-  // ── NeuNumber handlers ────────────────────────────────────
+  // ── NeuNumber handlers ─────────────────────────────────────
   function onFreqChange(e) {
-    freq = e.detail.value;
-    dispatch('change', { freq, q, loCut, hiCut });
+    const v = Math.min(FMAX, Math.max(FMIN, e.detail.value));
+    if (loCut && !hiCut) loCutFreq = v;
+    else                 hiCutFreq = v;
+    dispatch('change', { loCutFreq, hiCutFreq, q, loCut, hiCut });
   }
   function onQChange(e) {
     q = e.detail.value;
-    dispatch('change', { freq, q, loCut, hiCut });
+    dispatch('change', { loCutFreq, hiCutFreq, q, loCut, hiCut });
   }
 </script>
 
-<div>
+<div class="fg-wrap">
 
-  <!-- ── Header ─────────────────────────────────────────── -->
-  <div class="fg-header">
-    <div class="toggles">
-      <NeuButton
-        label="Lo Cut"
-        active={loCut}
-        on:change={e => { loCut = e.detail.active; dispatch('change', { freq, q, loCut, hiCut }); }}
-      />
-      <NeuButton
-        label="Hi Cut"
-        active={hiCut}
-        on:change={e => { hiCut = e.detail.active; dispatch('change', { freq, q, loCut, hiCut }); }}
-      />
-    </div>
+  <!-- ── Toggles ────────────────────────────────────────── -->
+  <div class="toggles">
+    <NeuButton label="Lo Cut" active={loCut}
+      on:change={e => { loCut = e.detail.active; dispatch('change', { loCutFreq, hiCutFreq, q, loCut, hiCut }); }}
+    />
+    <NeuButton label="Hi Cut" active={hiCut}
+      on:change={e => { hiCut = e.detail.active; dispatch('change', { loCutFreq, hiCutFreq, q, loCut, hiCut }); }}
+    />
   </div>
 
   <!-- ── Canvas ─────────────────────────────────────────── -->
   <div class="canvas-shell">
     <canvas
       bind:this={canvas}
-      width={CW}
-      height={CH}
+      width={CW} height={CH}
       class="graph-canvas"
       class:dragging
       on:mousedown={onCanvasMouseDown}
     />
   </div>
 
-  <!-- ── NeuNumber controls ─────────────────────────────── -->
-  <div class="controls-row" style="align-items:center;">
+  <!-- ── Readouts ───────────────────────────────────────── -->
+  <div class="controls-row">
     <NeuNumber
       label="FREQ"
-      value={freq}
-      min={50}
-      max={18000}
-      step={1}
-      unit=" Hz"
-      decimals={0}
+      value={Math.round(activeFreq)}
+      min={50} max={18000} step={1} unit=" Hz" decimals={0}
       on:change={onFreqChange}
     />
     <NeuNumber
-      label="Q"
-      value={q}
-      min={0.5}
-      max={9}
-      step={0.01}
-      decimals={2}
+      label="WIDTH"
+      value={+q.toFixed(2)}
+      min={0.5} max={9} step={0.01} decimals={2}
       on:change={onQChange}
     />
   </div>
@@ -296,38 +242,19 @@
   .fg-wrap {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    background: #ede6da;
-    border-radius: 14px;
-    box-shadow:
-      8px 8px 20px rgba(150, 130, 100, 0.3),
-      -6px -6px 16px rgba(255, 252, 244, 0.9);
-    padding: 10px 10px 12px;
-    user-select: none;
-  }
-
-  .fg-header {
-    display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: 0 2px;
-  }
-
-  .fg-title {
-    font-family: 'DM Sans', sans-serif;
-    font-size: 0.55rem;
-    font-weight: 300;
-    letter-spacing: 0.22em;
-    text-transform: uppercase;
-    color: rgba(130, 110, 85, 0.65);
+    gap: 10px;
+    width: 100%;
   }
 
   .toggles {
     display: flex;
     gap: 12px;
+    justify-content: center;
   }
 
   .canvas-shell {
+    width: 100%;
     border-radius: 10px;
     overflow: hidden;
     box-shadow:
@@ -345,14 +272,11 @@
     border-radius: 10px;
   }
 
-  .graph-canvas.dragging {
-    cursor: grabbing;
-  }
+  .graph-canvas.dragging { cursor: grabbing; }
 
   .controls-row {
     display: flex;
     justify-content: center;
     gap: 20px;
-    padding-top: 2px;
   }
 </style>

@@ -1,23 +1,20 @@
 <script lang="ts">
     import {
         params, setParameterValue,
-        modeSelected, smoothSelected, densitySelected,
-        flatEnabledSelected, cutEnabledSelected,
-        crossoverHz, diffusionPct,
+        smoothSelected, densitySelected,
         toNormalized, sizeToNormalized
     } from './state/store';
     import { bridge } from './bridge/bridge';
     import type { ParameterId } from './types/parameters';
 
-    import NeuKnob     from './components/NeuKnob.svelte';
-    import NeuButton   from './components/NeuButton.svelte';
-    import NeuSelector from './components/NeuSelector.svelte';
-    import NeuNumber   from './components/NeuNumber.svelte';
-    import FilterGraph from './components/FilterGraph.svelte';
+    import NeuKnob          from './components/NeuKnob.svelte';
+    import NeuButton        from './components/NeuButton.svelte';
+    import NeuSelector      from './components/NeuSelector.svelte';
+    import NeuNumber        from './components/NeuNumber.svelte';
+    import FilterGraph      from './components/FilterGraph.svelte';
     import NeuDiffusionNetworkGraph from './components/NeuDiffusionNetworkGraph.svelte';
-    import NeuKnobDiscrete from './components/NeuKnobDiscrete.svelte';
+    import NeuKnobDiscrete  from './components/NeuKnobDiscrete.svelte';
 
-    // Destructure individual stores so Svelte's $X auto-subscribe syntax works
     const {
         loCutEnabled, hiCutEnabled, loCutFreq, hiCutFreq, hiCutQ,
         erEnabled, erAmount, erRate, erShape,
@@ -29,23 +26,28 @@
         flatEnabled, cutEnabled, stereo, density,
     } = params;
 
+    // ── Local UI state ────────────────────────────────────────
+    let activeBand: 'low' | 'high' = 'low';
+
+    // ── Bridge helpers ────────────────────────────────────────
     function send(id: ParameterId, value: number) {
         setParameterValue(id, value);
         bridge.sendParameterChange(id, value);
     }
-
     function sendBool(id: ParameterId, active: boolean) {
         send(id, active ? 1 : 0);
     }
-
     function sendSelector(id: ParameterId, selected: number, numOptions: number) {
         send(id, selected / (numOptions - 1));
     }
 
-    // Reactive display values for FilterGraph (denormalize from store)
-    $: freqDisp = Math.max(50, Math.min(18000, 50 + 17950 * Math.pow($hiCutFreq, 1 / 0.3)));
-    $: qDisp    = Math.max(0.5, Math.min(9.0,   0.5 + 8.5   * Math.pow($hiCutQ,    1 / 0.5)));
+    // ── FilterGraph — denormalize store values to display units ──
+    $: loCutFreqDisp = Math.max(50,  Math.min(18000, 50 + 17950 * Math.pow($loCutFreq, 1 / 0.3)));
+    $: hiCutFreqDisp = Math.max(50,  Math.min(18000, 50 + 17950 * Math.pow($hiCutFreq, 1 / 0.3)));
+    $: hiCutQDisp    = Math.max(0.5, Math.min(9.0,   0.5 + 8.5   * Math.pow($hiCutQ,   1 / 0.5)));
 
+    // ── Diffusion Network — denormalize crossoverFreq for NeuNumber ──
+    $: crossoverDisp = +(200 + 7800 * Math.pow($crossoverFreq, 2)).toFixed(0);
 </script>
 
 <main class="plugin-root">
@@ -66,19 +68,21 @@
             <div class="panel-body">
 
                 <FilterGraph
-                    freq={freqDisp}
-                    q={qDisp}
+                    loCutFreq={loCutFreqDisp}
+                    hiCutFreq={hiCutFreqDisp}
+                    q={hiCutQDisp}
                     loCut={$loCutEnabled > 0.5}
                     hiCut={$hiCutEnabled > 0.5}
-                    highFilterType={$highFilterType > 0.5}
                     on:change={e => {
                         send('loCutEnabled', e.detail.loCut ? 1 : 0);
                         send('hiCutEnabled', e.detail.hiCut ? 1 : 0);
-                        send('hiCutFreq', toNormalized(e.detail.freq, 50, 18000, 0.3));
-                        send('hiCutQ',    toNormalized(e.detail.q,    0.5, 9.0,  0.5));
+                        send('loCutFreq', toNormalized(e.detail.loCutFreq, 50, 18000, 0.3));
+                        send('hiCutFreq', toNormalized(e.detail.hiCutFreq, 50, 18000, 0.3));
+                        send('hiCutQ',    toNormalized(e.detail.q,         0.5, 9.0,  0.5));
                     }}
                 />
 
+                <div class="subsection-label">Predelay</div>
                 <NeuKnob label="Predelay" value={$predelay} min={0} max={500} unit=" ms"
                     on:change={e => send('predelay', e.detail.value)} />
 
@@ -126,12 +130,70 @@
             <div class="panel-title">Diffusion Network</div>
             <div class="panel-body">
 
+                <!-- Row 1: Band selectors + filter type toggle -->
+                <div class="dng-header">
+                    <div class="band-btns">
+                        <NeuButton label="Low"
+                            active={activeBand === 'low'}
+                            on:change={() => activeBand = 'low'}
+                        />
+                        <NeuButton label="High"
+                            active={activeBand === 'high'}
+                            on:change={() => activeBand = 'high'}
+                        />
+                    </div>
+                    <NeuSelector
+                        options={['LP', 'Shelf']}
+                        selected={$highFilterType > 0.5 ? 1 : 0}
+                        on:change={e => send('highFilterType', e.detail.selected)}
+                    />
+                </div>
+
+                <!-- Row 2: Parameter readouts -->
+                <div class="dng-params">
+                    <!-- Low band -->
+                    <div class="dng-band">
+                        <span class="node-dot dot-teal"></span>
+                        <NeuNumber label="CROSS"
+                            value={+crossoverDisp}
+                            min={200} max={8000} step={10} unit=" Hz" decimals={0}
+                            on:change={e => send('crossoverFreq', toNormalized(e.detail.value, 200, 8000, 0.5))}
+                        />
+                        <NeuNumber label="DIFF"
+                            value={+$diffusion.toFixed(2)}
+                            min={0} max={1} step={0.01} decimals={2}
+                            on:change={e => send('diffusion', e.detail.value)}
+                        />
+                    </div>
+
+                    <div class="dng-divider"></div>
+
+                    <!-- High band -->
+                    <div class="dng-band">
+                        <span class="node-dot dot-orange" class:dimmed={$highFilterType > 0.5}></span>
+                        <NeuNumber label="DAMP"
+                            value={+$damping.toFixed(2)}
+                            min={0} max={1} step={0.01} decimals={2}
+                            on:change={e => send('damping', e.detail.value)}
+                        />
+                        <div class="feed-wrap" class:disabled={$highFilterType > 0.5}>
+                            <NeuNumber label="FEED"
+                                value={+$feedback.toFixed(2)}
+                                min={0} max={1} step={0.01} decimals={2}
+                                on:change={$highFilterType > 0.5 ? undefined : e => send('feedback', e.detail.value)}
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Row 3: Graph (full width) -->
                 <NeuDiffusionNetworkGraph
                     crossoverFreq={$crossoverFreq}
                     diffusion={$diffusion}
                     damping={$damping}
                     feedback={$feedback}
                     highFilterType={$highFilterType > 0.5}
+                    activeBand={activeBand}
                     on:change={e => {
                         send('crossoverFreq', e.detail.crossoverFreq);
                         send('diffusion',     e.detail.diffusion);
@@ -140,9 +202,9 @@
                     }}
                 />
 
-                <div class="subsection-label">Difussion</div>
-                <div class="row" style="gap:10px; margin-top:4px;">
-                    <NeuNumber label="Diffusion Density"
+                <!-- Diffusion + Scale readouts -->
+                <div class="row" style="gap:10px;">
+                    <NeuNumber label="Diffusion"
                         value={+($diffusion * 100).toFixed(1)}
                         min={0} max={100} step={1} unit="%" decimals={1}
                         on:change={e => send('diffusion', e.detail.value / 100)}
@@ -152,17 +214,21 @@
                         min={0} max={100} step={1} unit="%" decimals={1}
                         on:change={e => send('scale', e.detail.value / 100)}
                     />
-                <!-- ⚠ Scale is registered in APVTS but unconnected to DSP. Wiring in a future step. -->
-
-                <NeuNumber label="Diffuse" value={+(-30 + 36 * $diffuseGain).toFixed(1)} min={-30} max={6} step={0.5} unit=" dB" decimals={1}
-                    on:change={e => send('diffuseGain', (e.detail.value + 30) / 36)} />
+                    <!-- ⚠ Scale: registered in APVTS, unconnected to DSP -->
+                    <NeuNumber label="Diffuse"
+                        value={+(-30 + 36 * $diffuseGain).toFixed(1)}
+                        min={-30} max={6} step={0.5} unit=" dB" decimals={1}
+                        on:change={e => send('diffuseGain', (e.detail.value + 30) / 36)}
+                    />
                 </div>
 
-                <div class="row" style="gap:8px;">
-                    <div>
+                <!-- Chorus + Size subsections side by side, headers aligned -->
+                <div class="subsection-row">
+
+                    <div class="subsection-col">
                         <div class="subsection-label">Chorus</div>
                         <div class="row" style="gap:8px;">
-                            <NeuButton label="Chorus"
+                            <NeuButton label="On"
                                 active={$chorusEnabled > 0.5}
                                 icon=":)"
                                 on:change={e => sendBool('chorusEnabled', e.detail.active)}
@@ -180,10 +246,11 @@
                                 />
                             </div>
                         </div>
-                    </div>  
-                    <div>
+                    </div>
+
+                    <div class="subsection-col">
                         <div class="subsection-label">Size</div>
-                        <div class="row" style="gap:10px;">
+                        <div class="col" style="gap:8px;">
                             <NeuKnobDiscrete
                                 label="Smooth"
                                 options={['Off', 'Low', 'Med', 'High']}
@@ -192,9 +259,10 @@
                             />
                             <NeuKnob label="Size" value={$size} min={0.22} max={500} unit=""
                                 on:change={e => send('size', e.detail.value)} />
+                        </div>
                     </div>
-                </div>    
-            </div>
+
+                </div>
 
             </div>
         </section>
@@ -209,7 +277,7 @@
 
                 <div class="subsection-label">Mode</div>
                 <div class="triangle-group">
-                        <NeuButton
+                    <NeuButton
                         label="Freeze"
                         active={$freeze > 0.5}
                         icon="❄"
@@ -237,10 +305,10 @@
             <div class="panel-body">
 
                 <NeuKnobDiscrete
-                label="Density"
-                options={['Sparse', 'Low', 'Mid', 'High']}
-                selected={$densitySelected}
-                on:change={e => sendSelector('density', e.detail.selected, 4)}
+                    label="Density"
+                    options={['Sparse', 'Low', 'Mid', 'High']}
+                    selected={$densitySelected}
+                    on:change={e => sendSelector('density', e.detail.selected, 4)}
                 />
 
                 <NeuKnob label="Stereo" value={$stereo} min={0} max={120} unit="°"
@@ -274,23 +342,16 @@
         flex-direction: column;
         background: #ede6da;
         min-height: 100vh;
-        padding: 0;
     }
 
+    /* ── Top bar ── */
     .top-bar {
         display: flex;
         align-items: center;
-        justify-content: space-between;
         padding: 10px 20px 8px;
         border-bottom: 1px solid rgba(150,130,100,0.15);
     }
-
-    .plugin-title {
-        display: flex;
-        align-items: baseline;
-        gap: 10px;
-    }
-
+    .plugin-title { display: flex; align-items: baseline; }
     .title-main {
         font-family: 'DM Serif Display', serif;
         font-size: 1.1rem;
@@ -298,10 +359,10 @@
         color: rgba(110, 88, 60, 0.85);
     }
 
+    /* ── Panels ── */
     .panels-row {
         display: flex;
         flex: 1;
-        gap: 0;
         padding: 12px 12px 8px;
         align-items: stretch;
         overflow: hidden;
@@ -345,6 +406,20 @@
         gap: 10px;
     }
 
+    /* ── Shared layout ── */
+    .row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+    .col {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+    }
+
+    /* ── Subsection separator label ── */
     .subsection-label {
         font-size: 0.5rem;
         font-weight: 300;
@@ -358,26 +433,82 @@
         margin-top: 2px;
     }
 
-    .row {
+    /* ── Diffusion Network: header row ── */
+    .dng-header {
         display: flex;
         align-items: center;
-        gap: 12px;
+        justify-content: space-between;
+        width: 100%;
+        gap: 8px;
+    }
+    .band-btns {
+        display: flex;
+        gap: 8px;
     }
 
-    .col {
+    /* ── Diffusion Network: param readout row ── */
+    .dng-params {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        width: 100%;
+        justify-content: center;
+    }
+    .dng-band {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .dng-divider {
+        width: 1px;
+        height: 28px;
+        background: rgba(150,130,100,0.18);
+        flex-shrink: 0;
+        margin: 0 4px;
+    }
+    .node-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
+    }
+    .dot-teal   { background: #00c8b4; box-shadow: 0 0 4px rgba(0,200,180,0.5); }
+    .dot-orange { background: #f5a623; box-shadow: 0 0 4px rgba(245,166,35,0.5); }
+    .dot-orange.dimmed { background: #b8924a; box-shadow: none; opacity: 0.45; }
+
+    .feed-wrap { display: contents; }
+    .feed-wrap.disabled {
+        display: block;
+        opacity: 0.35;
+        pointer-events: none;
+    }
+
+    /* ── Chorus + Size side-by-side subsections ── */
+    .subsection-row {
+        display: flex;
+        width: 100%;
+        gap: 12px;
+        align-items: flex-start;
+    }
+    .subsection-col {
+        flex: 1;
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 6px;
+        gap: 8px;
+    }
+    /* Subsection label inside a col gets no left-align override */
+    .subsection-col .subsection-label {
+        width: 100%;
     }
 
+    /* ── Decay panel ── */
     .triangle-group {
         display: flex;
         flex-direction: column;
         align-items: center;
         gap: 6px;
     }
-
     .triangle-top {
         display: flex;
         gap: 10px;
