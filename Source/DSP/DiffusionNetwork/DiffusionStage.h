@@ -1,5 +1,5 @@
 #pragma once
-#include "DelayLine.h"
+#include "DiffusionNetwork/DelayLine.h"
 
 // Single stereo allpass diffusion stage.
 // Uses Schroeder allpass: out = -g*in + delay + g*delay_out
@@ -40,3 +40,4 @@ private:
     float coeff = 0.6f;
     float z[2] = { 0.0f, 0.0f };
 };
+

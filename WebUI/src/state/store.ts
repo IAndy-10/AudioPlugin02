@@ -22,7 +22,6 @@ export const params = {
     crossoverFreq: writable(0.5),
     diffusion:     writable(0.6),
     scale:         writable(0.5),
-    // TODO: 'scale' is registered in APVTS but unconnected to any DSP module. Wire in a future step.
     decay:         writable(0.42),
     damping:       writable(0.5),
     feedback:      writable(0.75),
@@ -44,11 +43,9 @@ export const params = {
     size:     writable(0.5),
     freeze:   writable(0),
     flatEnabled: writable(0),
-    // TODO: 'flatEnabled' registered in APVTS but DSP behavior not yet implemented.
     cutEnabled:  writable(0),
-    // TODO: 'cutEnabled' registered in APVTS but DSP behavior not yet implemented.
     stereo:   writable(1.0),  // default 120 degrees → normalized 120/120 = 1.0
-    density:  writable(0.33),
+    density:  writable(1.0),  // default High (index 3 → normalized 1.0) = 4 active stages
 };
 
 export function setParameterValue(id: ParameterId, value: number) {

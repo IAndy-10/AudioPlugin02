@@ -22,22 +22,27 @@ AudioPlugin02/
 │   │   ├── ParameterIDs.h               — string ID constants
 │   │   └── ParameterLayout.h            — APVTS layout (ranges, defaults)
 │   └── DSP/
-│       ├── FDNReverb.h / .cpp           — 8-line FDN core
-│       ├── FeedbackMatrix.h             — Hadamard 8×8 matrix
-│       ├── DiffusionNetwork.h / .cpp    — 4-stage Schroeder input diffusion
-│       ├── DiffusionStage.h             — stereo allpass stage
-│       ├── CrossoverFilter.h / .cpp     — per-line frequency-dependent damping
-│       ├── EarlyReflections.h / .cpp    — 8-tap comb-like reflections
-│       ├── Predelay.h / .cpp            — 0–500ms stereo pre-reverb delay
-│       ├── InputFilter.h / .cpp         — hi-pass + lo-pass Butterworth biquads
-│       ├── Chorus.h / .cpp              — LFO-modulated stereo delay
-│       ├── DryWetMixer.h                — per-sample crossfade with smoothing
-│       ├── StereoWidener.h              — mid-side width control
-│       ├── DelayLine.h                  — circular buffer with linear interpolation
-│       ├── LFO.h                        — phase-accumulator sine oscillator
-│       ├── SmoothedValue.h              — exponential parameter smoother
-│       ├── SpinModulator.h / .cpp       — early reflection modulation
-│       └── Freeze.h                     — state carrier for freeze mode
+│       ├── Decay/
+│       │   ├── FDNReverb.h / .cpp       — 8-line FDN core
+│       │   └── Freeze.h                 — state carrier for freeze mode
+│       ├── DiffusionNetwork/
+│       │   ├── DiffusionNetwork.h / .cpp — 4-stage Schroeder input diffusion
+│       │   ├── DiffusionStage.h          — stereo allpass stage
+│       │   ├── CrossoverFilter.h / .cpp  — per-line frequency-dependent damping
+│       │   ├── Chorus.h / .cpp           — LFO-modulated stereo delay
+│       │   ├── DelayLine.h               — circular buffer with linear interpolation
+│       │   ├── FeedbackMatrix.h          — Hadamard 8×8 matrix
+│       │   ├── LFO.h                     — phase-accumulator sine oscillator
+│       │   └── SmoothedValue.h           — exponential parameter smoother
+│       ├── EarlyReflections/
+│       │   ├── EarlyReflections.h / .cpp — 8-tap comb-like reflections
+│       │   └── SpinModulator.h / .cpp    — early reflection modulation
+│       ├── Input/
+│       │   ├── InputFilter.h / .cpp      — hi-pass + lo-pass Butterworth biquads
+│       │   └── Predelay.h / .cpp         — 0–500 ms stereo pre-reverb delay
+│       └── Output/
+│           ├── DryWetMixer.h             — per-sample crossfade with smoothing
+│           └── StereoWidener.h           — mid-side width control
 └── WebUI/
     ├── vite.config.ts
     ├── src/
@@ -138,8 +143,8 @@ Simulates frequency-dependent room absorption (high frequencies decay faster). C
 ### InputFilter — Tone Shaping
 
 Two independent 2nd-order Butterworth biquads (direct form II), one per stereo channel:
-- **Hi-pass (Lo Cut):** 20–500 Hz, Q = 0.7071
-- **Lo-pass (Hi Cut):** 1000–20000 Hz, Q = 0.1–9.0 (variable resonance)
+- **Hi-pass (Lo Cut):** 50–18 000 Hz, Q = 0.7071 (fixed)
+- **Lo-pass (Hi Cut):** 50–18 000 Hz, Q = 0.5–9.0 (variable resonance)
 
 ### EarlyReflections — 8-Tap Reflections
 
@@ -184,61 +189,60 @@ Normalized 8×8 Hadamard matrix (±1/√8). Applied via fast Walsh-Hadamard tran
 
 ---
 
-## 4. Parameters (24 total)
+## 4. Parameters (31 total)
 
 All parameters are stored in JUCE `AudioProcessorValueTreeState` (APVTS) and communicated to the UI in normalized 0–1 form.
 
-### Input Filter (5)
+### Panel 1 — Input (6)
 | ID | Name | Type | Range | Default |
 |----|------|------|-------|---------|
 | `loCutEnabled` | Lo Cut | Bool | — | false |
 | `hiCutEnabled` | Hi Cut | Bool | — | false |
-| `loCutFreq` | Lo Cut Freq | Float | 20–500 Hz | 80 Hz |
-| `hiCutFreq` | Hi Cut Freq | Float | 1000–20000 Hz | 8000 Hz |
-| `hiCutQ` | Hi Cut Q | Float | 0.1–9.0 | 0.7071 |
+| `loCutFreq` | Lo Cut Freq | Float | 50–18 000 Hz (skew 0.3) | 80 Hz |
+| `hiCutFreq` | Hi Cut Freq | Float | 50–18 000 Hz (skew 0.3) | 8000 Hz |
+| `hiCutQ` | Hi Cut Q | Float | 0.5–9.0 | 0.7071 |
+| `predelay` | Predelay | Float | 0–500 ms | 20 ms |
 
-### Early Reflections (4)
+### Panel 2 — Early Reflections (5)
 | ID | Name | Type | Range | Default |
 |----|------|------|-------|---------|
 | `erEnabled` | ER Spin | Bool | — | false |
-| `erAmount` | ER Amount | Float | 0–1 | 0.3 |
-| `erRate` | ER Rate | Float | 0.1–10 Hz | 1.0 Hz |
+| `erAmount` | ER Amount | Float | 2–55 | 10 |
+| `erRate` | ER Rate | Float | 0.07–1.3 Hz | 0.5 Hz |
 | `erShape` | ER Shape | Float | 0–1 | 0.5 |
+| `reflectGain` | Reflect Gain | Float | −30 to +6 dB | 0 dB |
 
-### FDN Reverb Core (7)
+### Panel 3 — Diffusion Network (11)
 | ID | Name | Type | Range | Default |
 |----|------|------|-------|---------|
 | `reverbMode` | Mode | Int | 0–1 | 0 (High) |
-| `crossoverFreq` | Crossover Freq | Float | 200–8000 Hz | 3000 Hz |
+| `highFilterType` | High Filter Type | Bool | false = LP, true = High Shelf | false |
+| `crossoverFreq` | Crossover Freq | Float | 200–8 000 Hz | 3000 Hz |
 | `diffusion` | Diffusion | Float | 0–1 | 0.6 |
 | `scale` | Scale | Float | 0–1 | 0.5 |
-| `decay` | Decay | Float | 100–10000 ms | 1500 ms |
 | `damping` | Damping | Float | 0–1 | 0.5 |
 | `feedback` | Feedback | Float | 0–1 | 0.75 |
+| `chorusEnabled` | Chorus Enable | Bool | — | false |
+| `chorusAmount` | Chorus Amount | Float | 0.01–4.0 | 0.2 |
+| `chorusRate` | Chorus Rate | Float | 0.01–8.0 Hz | 1.5 Hz |
+| `diffuseGain` | Diffuse Gain | Float | −30 to +6 dB | 0 dB |
 
-### Chorus (2)
+### Panel 4 — Decay (6)
 | ID | Name | Type | Range | Default |
 |----|------|------|-------|---------|
-| `chorusAmount` | Chorus Amount | Float | 0–1 | 0.2 |
-| `chorusRate` | Chorus Rate | Float | 0.1–10 Hz | 1.5 Hz |
-
-### Output (3)
-| ID | Name | Type | Range | Default |
-|----|------|------|-------|---------|
-| `reflectGain` | Reflect Gain | Float | −24 to +6 dB | 0 dB |
-| `diffuseGain` | Diffuse Gain | Float | −24 to +6 dB | 0 dB |
-| `dryWet` | Dry/Wet | Float | 0–100% | 50% |
-
-### Utility (7)
-| ID | Name | Type | Range | Default |
-|----|------|------|-------|---------|
-| `predelay` | Predelay | Float | 0–500 ms | 20 ms |
+| `decay` | Decay (RT60) | Float | 200–60 000 ms | 1500 ms |
 | `smooth` | Smooth | Int | 0–3 (Off/Low/Med/High) | 0 |
-| `size` | Size | Float | 0–1 | 0.5 |
+| `size` | Size | Float | 0–1 (maps to 0.22–500 in UI, log) | 0.5 |
 | `freeze` | Freeze | Bool | — | false |
-| `flatCut` | Flat/Cut | Int | 0–1 | 0 |
-| `stereo` | Stereo | Float | 0–2 | 1.0 |
-| `density` | Density | Int | 0–3 (Low/Med/High/Ultra) | 1 |
+| `flatEnabled` | Flat | Bool | — | false |
+| `cutEnabled` | Cut | Bool | — | false |
+
+### Panel 5 — Output (3)
+| ID | Name | Type | Range | Default |
+|----|------|------|-------|---------|
+| `stereo` | Stereo Width | Float | 0–120° | 120° |
+| `density` | Density | Int | 0–3 (Sparse/Low/Mid/High) | 3 (High) |
+| `dryWet` | Dry/Wet | Float | 0–100% | 50% |
 
 ---
 
@@ -286,17 +290,17 @@ evaluateJavascript("if (window.setParameterValue) { window.setParameterValue('"
 
 ### State Management
 
-Each of the 24 parameters has its own `writable` Svelte store (normalized 0–1). Derived stores convert normalized values to display units:
+Each of the 31 parameters has its own `writable` Svelte store (normalized 0–1). Derived stores convert normalized values to display units:
 
 ```typescript
 // store.ts
 export const params = {
   decay: writable(0.42),
   loCutFreq: writable(0),
-  // ... 22 more
+  // ... 29 more
 };
 
-export const loCutHz = derived(params.loCutFreq, $v => Math.round(20 + $v * 480));
+export const loCutHz = derived(params.loCutFreq, $v => Math.round(50 + 17950 * Math.pow($v, 1 / 0.3)));
 export const modeSelected = derived(params.reverbMode, $v => Math.round($v));
 ```
 
@@ -314,8 +318,8 @@ Fine-grained reactivity: updating one store only re-renders components subscribe
 │   1.2)   │   1.2)   │                │  0.9)  │  0.7) │
 ├──────────┴──────────┴────────────────┴────────┴───────┤
 │ Bottom utility row                                     │
-│ Predelay · Smooth · Size · Decay · Freeze              │
-│ FlatCut · Stereo · Density                             │
+│ Smooth · Size · Decay · Freeze · Flat · Cut            │
+│ Stereo · Density · Dry/Wet                             │
 └────────────────────────────────────────────────────────┘
 ```
 

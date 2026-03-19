@@ -48,8 +48,6 @@ bool AudioPluginAudioProcessor::isBusesLayoutSupported(const BusesLayout& layout
 }
 
 void AudioPluginAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
-    juce::ignoreUnused(samplesPerBlock);
-
     // Prepare DSP modules
     inputFilter.prepare(sampleRate);
     predelayModule.prepare(sampleRate);
@@ -57,6 +55,9 @@ void AudioPluginAudioProcessor::prepareToPlay(double sampleRate, int samplesPerB
     fdnReverb.prepare(sampleRate);
     chorusModule.prepare(sampleRate);
     stereoWidener.setWidth(1.0f);
+    dryWetMixer.prepare(getTotalNumOutputChannels(), samplesPerBlock);  // B3 fix
+    erOutputBuffer.setSize(getTotalNumOutputChannels(), samplesPerBlock);
+    lastSmoothMode = -1; // force smoother reset on first block
 
     // Prepare smoothed values (10ms smoothing time)
     auto initSmooth = [&](juce::SmoothedValue<float>& sv, float initial) {
@@ -102,6 +103,10 @@ void AudioPluginAudioProcessor::prepareToPlay(double sampleRate, int samplesPerB
 
 void AudioPluginAudioProcessor::releaseResources() {
     inputFilter.reset();
+    predelayModule.reset();
+    earlyReflections.reset();
+    fdnReverb.reset();
+    chorusModule.reset();
 }
 
 void AudioPluginAudioProcessor::updateDSPParameters() {
@@ -125,23 +130,29 @@ void AudioPluginAudioProcessor::updateDSPParameters() {
     // ===== PANEL 3: DIFFUSION NETWORK =====
     fdnReverb.setDecayMs(apvts.getRawParameterValue(decay.getParamID())->load());
     fdnReverb.setDiffusion(apvts.getRawParameterValue(diffusion.getParamID())->load());
-    fdnReverb.setSize(apvts.getRawParameterValue(size.getParamID())->load());
+    fdnReverb.setSize(apvts.getRawParameterValue(PluginParamIDs::size.getParamID())->load());
     fdnReverb.setDamping(apvts.getRawParameterValue(damping.getParamID())->load());
     fdnReverb.setFeedback(apvts.getRawParameterValue(feedback.getParamID())->load());
     fdnReverb.setCrossoverFreq(apvts.getRawParameterValue(crossoverFreq.getParamID())->load());
     fdnReverb.setReverbMode(static_cast<int>(apvts.getRawParameterValue(reverbMode.getParamID())->load()));
     fdnReverb.setFrozen(apvts.getRawParameterValue(PluginParamIDs::freeze.getParamID())->load() > 0.5f);
     fdnReverb.setHighFilterType(apvts.getRawParameterValue(highFilterType.getParamID())->load() > 0.5f);
+    fdnReverb.setInputScale(apvts.getRawParameterValue(PluginParamIDs::scale.getParamID())->load());
+    fdnReverb.setFlatEnabled(apvts.getRawParameterValue(PluginParamIDs::flatEnabled.getParamID())->load() > 0.5f);
+    fdnReverb.setCutEnabled(apvts.getRawParameterValue(PluginParamIDs::cutEnabled.getParamID())->load() > 0.5f);
+    fdnReverb.setDensity(static_cast<int>(apvts.getRawParameterValue(density.getParamID())->load()));
 
     // Chorus subsection (Diffusion Network)
     chorusModule.setAmount(apvts.getRawParameterValue(chorusAmount.getParamID())->load());
     chorusModule.setRate(apvts.getRawParameterValue(chorusRate.getParamID())->load());
 
-    // ===== PANEL 5: OUTPUT =====
-    // Widener: stereo APVTS stores degrees (0–120) → width = degrees / 120.
-    stereoWidener.setWidth(apvts.getRawParameterValue(stereo.getParamID())->load() / 120.0f);
+    // Early Reflections (initial state; real-time updates happen in processBlock)
+    earlyReflections.setAmount((apvts.getRawParameterValue(erAmount.getParamID())->load() - 2.0f) / 53.0f);
+    earlyReflections.setRate(apvts.getRawParameterValue(erRate.getParamID())->load());
+    earlyReflections.setShape(apvts.getRawParameterValue(erShape.getParamID())->load());
 
-    // Mixer
+    // ===== PANEL 5: OUTPUT =====
+    stereoWidener.setWidth(apvts.getRawParameterValue(stereo.getParamID())->load() / 120.0f);
     dryWetMixer.setMix(apvts.getRawParameterValue(dryWet.getParamID())->load() / 100.0f);
 }
 
@@ -154,12 +165,27 @@ void AudioPluginAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     for (auto i = getTotalNumInputChannels(); i < totalNumOutputChannels; ++i)
         buffer.clear(i, 0, buffer.getNumSamples());
 
-    // Save dry signal for mixing later
+    const int numSamples  = buffer.getNumSamples();
+    const int numChannels = buffer.getNumChannels();
+
+    // ── Smooth mode: update ramp times when selector changes (B4 / smooth wiring) ──
+    int smoothMode = static_cast<int>(apvts.getRawParameterValue(PluginParamIDs::smooth.getParamID())->load());
+    if (smoothMode != lastSmoothMode) {
+        static constexpr float kSmoothTimes[] = { 0.001f, 0.02f, 0.08f, 0.20f }; // Off/Low/Med/High
+        float t = kSmoothTimes[juce::jlimit(0, 3, smoothMode)];
+        smoothDecay.reset(getSampleRate(), t);
+        smoothReflectGain.reset(getSampleRate(), t);
+        smoothDiffuseGain.reset(getSampleRate(), t);
+        lastSmoothMode = smoothMode;
+    }
+    smoothDecay.setTargetValue(apvts.getRawParameterValue(decay.getParamID())->load());
+    smoothReflectGain.setTargetValue(apvts.getRawParameterValue(reflectGain.getParamID())->load());
+    smoothDiffuseGain.setTargetValue(apvts.getRawParameterValue(diffuseGain.getParamID())->load());
+
+    // Save dry signal before any processing
     dryWetMixer.saveDry(buffer);
 
-    // --- Signal chain ---
     // ===== PANEL 1: INPUT =====
-    // 1. Input filter — update parameters every block so UI changes take effect immediately
     inputFilter.setLoCutEnabled(apvts.getRawParameterValue(loCutEnabled.getParamID())->load() > 0.5f);
     inputFilter.setHiCutEnabled(apvts.getRawParameterValue(hiCutEnabled.getParamID())->load() > 0.5f);
     inputFilter.setLoCutFreq(apvts.getRawParameterValue(loCutFreq.getParamID())->load());
@@ -167,44 +193,56 @@ void AudioPluginAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     inputFilter.setHiCutQ(apvts.getRawParameterValue(hiCutQ.getParamID())->load());
     inputFilter.process(buffer);
 
-    // 2. Predelay (Input panel)
     predelayModule.setDelayMs(apvts.getRawParameterValue(PluginParamIDs::predelay.getParamID())->load());
     predelayModule.process(buffer);
+    // buffer = filtered + predelayed dry signal (FDN input)
 
-    // ===== PANEL 2: EARLY REFLECTIONS =====
-    // 3. Early reflections (additive)
+    // ===== PANEL 2: EARLY REFLECTIONS (parallel path — B1 fix) =====
+    // Runs on the predelayed dry signal; ER-only output written to erOutputBuffer.
+    // This keeps reflectGain and diffuseGain independently applicable.
     earlyReflections.setEnabled(apvts.getRawParameterValue(erEnabled.getParamID())->load() > 0.5f);
-    earlyReflections.process(buffer);
+    earlyReflections.setAmount((apvts.getRawParameterValue(erAmount.getParamID())->load() - 2.0f) / 53.0f);
+    earlyReflections.setRate(apvts.getRawParameterValue(erRate.getParamID())->load());
+    earlyReflections.setShape(apvts.getRawParameterValue(erShape.getParamID())->load());
+    erOutputBuffer.setSize(numChannels, numSamples, false, false, true);
+    earlyReflections.processOut(buffer, erOutputBuffer);
+    // erOutputBuffer = ER contribution only; buffer still = predelayed dry
 
-    // ===== PANEL 3: DIFFUSION NETWORK =====
-    // 4. FDN reverb (replaces signal with reverb output)
+    // ===== PANEL 3: DIFFUSION NETWORK + DECAY =====
     bool isFrozen = apvts.getRawParameterValue(PluginParamIDs::freeze.getParamID())->load() > 0.5f;
     fdnReverb.setFrozen(isFrozen);
-    fdnReverb.setDecayMs(apvts.getRawParameterValue(decay.getParamID())->load());
+    fdnReverb.setDecayMs(smoothDecay.skip(numSamples));   // B4: smoothed decay
     fdnReverb.setDiffusion(apvts.getRawParameterValue(diffusion.getParamID())->load());
+    fdnReverb.setSize(apvts.getRawParameterValue(PluginParamIDs::size.getParamID())->load());
+    fdnReverb.setDamping(apvts.getRawParameterValue(damping.getParamID())->load());
+    fdnReverb.setFeedback(apvts.getRawParameterValue(feedback.getParamID())->load());
+    fdnReverb.setCrossoverFreq(apvts.getRawParameterValue(crossoverFreq.getParamID())->load());
+    fdnReverb.setReverbMode(static_cast<int>(apvts.getRawParameterValue(reverbMode.getParamID())->load()));
+    fdnReverb.setHighFilterType(apvts.getRawParameterValue(highFilterType.getParamID())->load() > 0.5f);
+    fdnReverb.setInputScale(apvts.getRawParameterValue(PluginParamIDs::scale.getParamID())->load());
+    fdnReverb.setFlatEnabled(apvts.getRawParameterValue(PluginParamIDs::flatEnabled.getParamID())->load() > 0.5f);
+    fdnReverb.setCutEnabled(apvts.getRawParameterValue(PluginParamIDs::cutEnabled.getParamID())->load() > 0.5f);
+    fdnReverb.setDensity(static_cast<int>(apvts.getRawParameterValue(density.getParamID())->load()));
     fdnReverb.process(buffer);
+    // buffer = FDN reverb output
 
-    // 5. Apply reflect and diffuse gains (Reflect: Early Reflections, Diffuse: Diffusion Network)
-    float rGain = juce::Decibels::decibelsToGain(
-        apvts.getRawParameterValue(reflectGain.getParamID())->load());
-    float dGain = juce::Decibels::decibelsToGain(
-        apvts.getRawParameterValue(diffuseGain.getParamID())->load());
-    buffer.applyGain(rGain * dGain);
+    // Apply diffuseGain to FDN tail; add reflectGain-scaled ER separately (B1 fix)
+    float dGain = juce::Decibels::decibelsToGain(smoothDiffuseGain.skip(numSamples));
+    float rGain = juce::Decibels::decibelsToGain(smoothReflectGain.skip(numSamples));
+    buffer.applyGain(dGain);
+    for (int ch = 0; ch < numChannels; ++ch)
+        buffer.addFrom(ch, 0, erOutputBuffer, ch, 0, numSamples, rGain);
 
-    // 6. Chorus subsection (Diffusion Network)
+    // Chorus subsection
     bool chorusOn = apvts.getRawParameterValue(chorusEnabled.getParamID())->load() > 0.5f;
     chorusModule.setAmount(apvts.getRawParameterValue(chorusAmount.getParamID())->load());
     chorusModule.setRate(apvts.getRawParameterValue(chorusRate.getParamID())->load());
     if (chorusOn) chorusModule.process(buffer);
 
     // ===== PANEL 5: OUTPUT =====
-    // 7. Stereo widener
-    // stereo APVTS stores degrees (0–120). Convert to internal width (0–1):
-    //   0°  = mono (width 0.0), 120° = unchanged stereo (width 1.0).
     stereoWidener.setWidth(apvts.getRawParameterValue(stereo.getParamID())->load() / 120.0f);
     stereoWidener.process(buffer);
 
-    // 8. Dry/wet mix
     dryWetMixer.setMix(apvts.getRawParameterValue(dryWet.getParamID())->load() / 100.0f);
     dryWetMixer.mixToOutput(buffer);
 }

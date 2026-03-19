@@ -27,3 +27,4 @@ public:
 private:
     T current = T(0), target = T(0), coeff = T(0);
 };
+

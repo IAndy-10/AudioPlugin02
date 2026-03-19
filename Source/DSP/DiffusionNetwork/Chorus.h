@@ -1,7 +1,7 @@
 #pragma once
 #include <juce_audio_basics/juce_audio_basics.h>
-#include "DelayLine.h"
-#include "LFO.h"
+#include "DiffusionNetwork/DelayLine.h"
+#include "DiffusionNetwork/LFO.h"
 
 // Stereo chorus effect using LFO-modulated delay lines.
 // Adds subtle movement to the reverb tail.
@@ -28,3 +28,4 @@ private:
     int baseDelaySamples = 0;
     float depthSamples   = 0.0f;
 };
+

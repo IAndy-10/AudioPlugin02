@@ -41,3 +41,4 @@ private:
     int writePos = 0;
     int size = 1;
 };
+

@@ -91,6 +91,19 @@ void FDNReverb::setHighFilterType(bool shelving) {
         f.setFilterType(shelving);
 }
 
+void FDNReverb::setInputScale(float s) {
+    inputScale = s;
+}
+
+void FDNReverb::setDensity(int d) {
+    // d: 0=Sparse→0 stages, 1=Low→1 stage, 2=Mid→2 stages, 3=High→4 stages
+    static constexpr int stageMap[] = { 0, 1, 2, 4 };
+    diffusion.setNumStages(stageMap[juce::jlimit(0, 3, d)]);
+}
+
+void FDNReverb::setFlatEnabled(bool f) { flatEnabledFlag = f; }
+void FDNReverb::setCutEnabled(bool c)  { cutEnabledFlag  = c; }
+
 void FDNReverb::updateDecayGains() {
     if (frozen) {
         // Freeze: maintain signal with maximum feedback
@@ -124,9 +137,11 @@ void FDNReverb::process(juce::AudioBuffer<float>& buffer) {
         float inL = buffer.getSample(0, sampleIdx);
         float inR = (numChannels >= 2) ? buffer.getSample(1, sampleIdx) : inL;
 
-        // --- Diffuse input before entering FDN ---
+        // --- Diffuse input, then blend with raw input (scale param) ---
         float diffL = inL, diffR = inR;
         diffusion.processStereo(diffL, diffR);
+        diffL = inL * (1.0f - inputScale) + diffL * inputScale;
+        diffR = inR * (1.0f - inputScale) + diffR * inputScale;
 
         // --- Read delay line outputs and apply damping ---
         std::array<float, N> y;
@@ -138,8 +153,8 @@ void FDNReverb::process(juce::AudioBuffer<float>& buffer) {
 
             y[i] = delayLines[i].readInterpolated(readPos);
 
-            // Frequency-dependent decay
-            if (!frozen)
+            // Frequency-dependent decay — bypassed when frozen with flat mode active
+            if (!(frozen && flatEnabledFlag))
                 y[i] = dampFilters[i].processSample(y[i]);
 
             // Apply decay gain
@@ -150,10 +165,11 @@ void FDNReverb::process(juce::AudioBuffer<float>& buffer) {
         FeedbackMatrix::apply(y);
 
         // --- Write back into delay lines (feedback + new input) ---
-        // Even lines get more L, odd lines get more R
+        // cut mode: when frozen with cut active, block new input to preserve frozen tail
         for (int i = 0; i < N; ++i) {
-            float input = (i % 2 == 0) ? diffL : diffR;
-            delayLines[i].write(input + y[i]);
+            float newInput = (i % 2 == 0) ? diffL : diffR;
+            float writeVal = (frozen && cutEnabledFlag) ? y[i] : (newInput + y[i]);
+            delayLines[i].write(writeVal);
         }
 
         // --- Mix outputs (even → L, odd → R) ---
@@ -179,3 +195,4 @@ void FDNReverb::reset() {
     }
     diffusion.reset();
 }
+

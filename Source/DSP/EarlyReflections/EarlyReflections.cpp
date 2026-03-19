@@ -21,6 +21,42 @@ void EarlyReflections::setAmount(float a)   { amount = a; spin.setAmount(a * 0.0
 void EarlyReflections::setRate(float hz)    { spin.setRate(hz); }
 void EarlyReflections::setShape(float s)    { shape = s; }
 
+void EarlyReflections::processOut(const juce::AudioBuffer<float>& input,
+                                   juce::AudioBuffer<float>& output) {
+    output.clear();
+    if (!enabled || amount <= 0.001f) return;
+
+    int numChannels = juce::jmin(input.getNumChannels(), 2);
+    int numSamples  = juce::jmin(input.getNumSamples(), output.getNumSamples());
+
+    for (int i = 0; i < numSamples; ++i) {
+        float spinL, spinR;
+        spin.getNextPair(spinL, spinR);
+
+        float inL = (numChannels >= 1) ? input.getSample(0, i) : 0.0f;
+        float inR = (numChannels >= 2) ? input.getSample(1, i) : inL;
+
+        for (int t = 0; t < NUM_TAPS; ++t) {
+            delayL[t].write(inL);
+            delayR[t].write(inR);
+        }
+
+        float erL = 0.0f, erR = 0.0f;
+        for (int t = 0; t < NUM_TAPS; ++t) {
+            float g = TAP_GAINS_GRADUAL[t] + shape * (TAP_GAINS_RAPID[t] - TAP_GAINS_GRADUAL[t]);
+            g *= amount;
+            erL += delayL[t].read(tapL[t]) * g;
+            erR += delayR[t].read(tapR[t]) * g;
+        }
+
+        erL += spinR * 0.15f;
+        erR += spinL * 0.15f;
+
+        if (numChannels >= 1) output.setSample(0, i, erL);
+        if (numChannels >= 2) output.setSample(1, i, erR);
+    }
+}
+
 void EarlyReflections::reset() {
     for (int t = 0; t < NUM_TAPS; ++t) {
         delayL[t].clear();
@@ -66,3 +102,4 @@ void EarlyReflections::process(juce::AudioBuffer<float>& buffer) {
         if (numChannels >= 2) buffer.addSample(1, i, erR);
     }
 }
+

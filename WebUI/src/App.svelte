@@ -202,15 +202,11 @@
                         min={0} max={100} step={1} unit="%" decimals={1}
                         on:change={e => send('diffusion', e.detail.value / 100)}
                     />
-                    <!-- TODO: wire DSP -->
-                    <!-- 1d: Scale unimplemented — dimmed, non-interactive -->
-                    <div class="unimplemented" title="Coming soon">
-                        <NeuNumber label="Scale"
-                            value={+($scale * 100).toFixed(1)}
-                            min={0} max={100} step={1} unit="%" decimals={1}
-                            on:change={e => send('scale', e.detail.value / 100)}
-                        />
-                    </div>
+                    <NeuNumber label="Scale"
+                        value={+($scale * 100).toFixed(1)}
+                        min={0} max={100} step={1} unit="%" decimals={1}
+                        on:change={e => send('scale', e.detail.value / 100)}
+                    />
                     <NeuNumber label="Diffuse"
                         value={+(-30 + 36 * $diffuseGain).toFixed(1)}
                         min={-30} max={6} step={0.5} unit=" dB" decimals={1}
@@ -290,20 +286,14 @@
                         on:change={e => sendBool('freeze', e.detail.active)}
                     />
                     <div class="triangle-top">
-                        <!-- TODO: wire DSP -->
-                        <!-- 1d: Flat/Cut unimplemented — dimmed, non-interactive -->
-                        <div class="unimplemented" title="Coming soon">
-                            <NeuButton label="Flat"
-                                active={$flatEnabled > 0.5}
-                                on:change={e => sendBool('flatEnabled', e.detail.active)}
-                            />
-                        </div>
-                        <div class="unimplemented" title="Coming soon">
-                            <NeuButton label="Cut"
-                                active={$cutEnabled > 0.5}
-                                on:change={e => sendBool('cutEnabled', e.detail.active)}
-                            />
-                        </div>
+                        <NeuButton label="Flat"
+                            active={$flatEnabled > 0.5}
+                            on:change={e => sendBool('flatEnabled', e.detail.active)}
+                        />
+                        <NeuButton label="Cut"
+                            active={$cutEnabled > 0.5}
+                            on:change={e => sendBool('cutEnabled', e.detail.active)}
+                        />
                     </div>
                 </div>
 
@@ -414,12 +404,6 @@
     /* 2a: dim panels when bypassed */
     .panels-row.bypassed { opacity: 0.5; pointer-events: none; }
 
-    /* 1d: unimplemented parameter wrapper */
-    .unimplemented {
-        opacity: 0.35;
-        pointer-events: none;
-        position: relative;
-    }
 
     .panel {
         background: #ede6da;

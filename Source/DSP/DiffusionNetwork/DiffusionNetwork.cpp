@@ -16,12 +16,17 @@ void DiffusionNetwork::setDiffusion(float d) {
         stage.setCoefficient(diffusion);
 }
 
+void DiffusionNetwork::setNumStages(int n) {
+    numActive = juce::jlimit(0, NUM_STAGES, n);
+}
+
 void DiffusionNetwork::processStereo(float& sampleL, float& sampleR) {
-    for (auto& stage : stages)
-        stage.processStereo(sampleL, sampleR);
+    for (int s = 0; s < numActive; ++s)
+        stages[s].processStereo(sampleL, sampleR);
 }
 
 void DiffusionNetwork::reset() {
     for (auto& stage : stages)
         stage.reset();
 }
+

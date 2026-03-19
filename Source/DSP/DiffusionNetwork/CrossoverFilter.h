@@ -41,3 +41,4 @@ private:
     double coeff = 0.5; // one-pole LP coefficient (shared by both modes)
     double z1    = 0.0;
 };
+

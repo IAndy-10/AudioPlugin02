@@ -71,42 +71,42 @@ target_sources(AudioPlugin02 PRIVATE
     Source/Parameters/ParameterLayout.h
 
     # DSP - Header-only utilities
-    Source/DSP/SmoothedValue.h
-    Source/DSP/LFO.h
-    Source/DSP/DelayLine.h
-    Source/DSP/FeedbackMatrix.h
-    Source/DSP/DiffusionStage.h
-    Source/DSP/Freeze.h
-    Source/DSP/StereoWidener.h
-    Source/DSP/DryWetMixer.h
+    Source/DSP/DiffusionNetwork/SmoothedValue.h
+    Source/DSP/DiffusionNetwork/LFO.h
+    Source/DSP/DiffusionNetwork/DelayLine.h
+    Source/DSP/DiffusionNetwork/FeedbackMatrix.h
+    Source/DSP/DiffusionNetwork/DiffusionStage.h
+    Source/DSP/Decay/Freeze.h
+    Source/DSP/Output/StereoWidener.h
+    Source/DSP/Output/DryWetMixer.h
 
     # DSP - Filters
-    Source/DSP/InputFilter.h
-    Source/DSP/InputFilter.cpp
-    Source/DSP/CrossoverFilter.h
-    Source/DSP/CrossoverFilter.cpp
+    Source/DSP/Input/InputFilter.h
+    Source/DSP/Input/InputFilter.cpp
+    Source/DSP/DiffusionNetwork/CrossoverFilter.h
+    Source/DSP/DiffusionNetwork/CrossoverFilter.cpp
 
     # DSP - Delay-based
-    Source/DSP/Predelay.h
-    Source/DSP/Predelay.cpp
-    Source/DSP/SpinModulator.h
-    Source/DSP/SpinModulator.cpp
+    Source/DSP/Input/Predelay.h
+    Source/DSP/Input/Predelay.cpp
+    Source/DSP/EarlyReflections/SpinModulator.h
+    Source/DSP/EarlyReflections/SpinModulator.cpp
 
     # DSP - Early Reflections
-    Source/DSP/EarlyReflections.h
-    Source/DSP/EarlyReflections.cpp
+    Source/DSP/EarlyReflections/EarlyReflections.h
+    Source/DSP/EarlyReflections/EarlyReflections.cpp
 
     # DSP - Diffusion
-    Source/DSP/DiffusionNetwork.h
-    Source/DSP/DiffusionNetwork.cpp
+    Source/DSP/DiffusionNetwork/DiffusionNetwork.h
+    Source/DSP/DiffusionNetwork/DiffusionNetwork.cpp
 
     # DSP - FDN Core
-    Source/DSP/FDNReverb.h
-    Source/DSP/FDNReverb.cpp
+    Source/DSP/Decay/FDNReverb.h
+    Source/DSP/Decay/FDNReverb.cpp
 
     # DSP - Modulation
-    Source/DSP/Chorus.h
-    Source/DSP/Chorus.cpp
+    Source/DSP/DiffusionNetwork/Chorus.h
+    Source/DSP/DiffusionNetwork/Chorus.cpp
 )
 
 target_include_directories(AudioPlugin02 PRIVATE

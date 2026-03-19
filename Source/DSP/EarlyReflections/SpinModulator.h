@@ -1,5 +1,5 @@
 #pragma once
-#include "LFO.h"
+#include "DiffusionNetwork/LFO.h"
 
 // Spin modulator for early reflections: two quadrature LFOs that create
 // a slow rotation effect, adding movement to the early reflection field.
@@ -18,3 +18,4 @@ private:
     LFO   lfoSin, lfoCos;
     float amount = 0.3f;
 };
+

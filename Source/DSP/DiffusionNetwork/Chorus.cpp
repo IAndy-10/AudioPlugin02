@@ -70,3 +70,4 @@ void Chorus::process(juce::AudioBuffer<float>& buffer) {
         }
     }
 }
+

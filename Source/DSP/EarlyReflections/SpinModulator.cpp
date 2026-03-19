@@ -31,3 +31,4 @@ void SpinModulator::reset() {
     lfoSin.reset();
     lfoCos.reset();
 }
+

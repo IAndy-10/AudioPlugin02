@@ -53,3 +53,4 @@ float CrossoverFilter::processSample(float in) {
     // LP mode (default): y[n] = coeff * x[n] + (1-coeff) * y[n-1]
     return static_cast<float>(z1);
 }
+

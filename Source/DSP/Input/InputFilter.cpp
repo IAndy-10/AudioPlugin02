@@ -103,3 +103,4 @@ void InputFilter::process(juce::AudioBuffer<float>& buffer) {
             processChannel(data, numSamples, lp_b0, lp_b1, lp_b2, lp_a1, lp_a2, lp_z1[ch], lp_z2[ch]);
     }
 }
+

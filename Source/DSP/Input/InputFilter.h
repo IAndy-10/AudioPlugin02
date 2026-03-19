@@ -40,3 +40,4 @@ private:
     double lp_b0 = 1, lp_b1 = 0, lp_b2 = 0, lp_a1 = 0, lp_a2 = 0;
     double lp_z1[2] = {}, lp_z2[2] = {};
 };
+

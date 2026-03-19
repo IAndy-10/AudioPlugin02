@@ -33,3 +33,4 @@ private:
         phaseInc = (sr > 0.0) ? static_cast<double>(freq) / sr : 0.0;
     }
 };
+

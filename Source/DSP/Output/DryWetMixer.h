@@ -4,7 +4,6 @@
 // Mixes a dry (input) buffer with a wet (processed) buffer.
 // mix = 0.0 → all dry; mix = 1.0 → all wet.
 // Per-sample interpolation smooths transitions when the knob changes quickly.
-
 class DryWetMixer {
 public:
     void setMix(float mixAmount) {
@@ -55,3 +54,4 @@ private:
     float mix      = 0.5f;
     juce::AudioBuffer<float> dryBuffer;
 };
+

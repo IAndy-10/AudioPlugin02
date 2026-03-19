@@ -27,3 +27,4 @@ public:
 private:
     float width = 1.0f;
 };
+

@@ -1,14 +1,13 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
-#include "InputFilter.h"
-#include "Predelay.h"
-#include "EarlyReflections.h"
-#include "FDNReverb.h"
-#include "Chorus.h"
-#include "Freeze.h"
-#include "StereoWidener.h"
-#include "DryWetMixer.h"
+#include "Input/InputFilter.h"
+#include "Input/Predelay.h"
+#include "EarlyReflections/EarlyReflections.h"
+#include "Decay/FDNReverb.h"
+#include "DiffusionNetwork/Chorus.h"
+#include "Output/StereoWidener.h"
+#include "Output/DryWetMixer.h"
 
 class AudioPluginAudioProcessor final : public juce::AudioProcessor {
 public:
@@ -48,9 +47,14 @@ private:
     EarlyReflections earlyReflections;
     FDNReverb        fdnReverb;
     Chorus           chorusModule;
-    Freeze           freezeModule;
     StereoWidener    stereoWidener;
     DryWetMixer      dryWetMixer;
+
+    // Separate buffer for ER-only output (B1 fix: keeps ER and FDN gains independent)
+    juce::AudioBuffer<float> erOutputBuffer;
+
+    // Smooth mode tracking (avoids resetting smoother every block)
+    int lastSmoothMode = -1;
 
     // Smoothed parameter values to avoid clicks
     juce::SmoothedValue<float> smoothDecay, smoothDiffusion, smoothSize;

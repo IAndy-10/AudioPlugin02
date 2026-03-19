@@ -1,8 +1,8 @@
 #pragma once
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <array>
-#include "DelayLine.h"
-#include "SpinModulator.h"
+#include "DiffusionNetwork/DelayLine.h"
+#include "EarlyReflections/SpinModulator.h"
 
 // Multi-tap early reflections with spin modulation.
 // 8 taps for L and 8 for R with prime delay lengths.
@@ -14,7 +14,14 @@ public:
     void setRate(float hz);       // Spin LFO rate
     void setShape(float shape);   // 0-1: blend between tap distribution profiles
 
+    // Additive: mixes ER output into buffer (original behaviour)
     void process(juce::AudioBuffer<float>& buffer);
+
+    // Separate: reads input as FDN feed, writes ER-only contribution to output.
+    // Use this when reflectGain and diffuseGain must be applied independently.
+    void processOut(const juce::AudioBuffer<float>& input,
+                    juce::AudioBuffer<float>& output);
+
     void reset();
 
 private:
@@ -44,3 +51,4 @@ private:
     float  shape    = 0.5f;
     std::array<int, NUM_TAPS> tapL {}, tapR {};
 };
+

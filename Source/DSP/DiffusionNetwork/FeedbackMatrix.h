@@ -28,3 +28,4 @@ public:
         for (auto& val : x) val *= NORM;
     }
 };
+

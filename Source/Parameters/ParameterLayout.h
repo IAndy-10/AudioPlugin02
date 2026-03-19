@@ -67,6 +67,7 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout
         scale, "Scale",
         juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f));
 
+    // scale (0-1): blends between raw and fully-diffused FDN input. 0=no diffusion, 1=full diffusion.
     // Note: damping/feedback are part of the Diffusion Network panel UI (and graph).
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         damping, "Damping",
@@ -128,8 +129,9 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         stereo, "Stereo",
         juce::NormalisableRange<float>(0.0f, 120.0f, 0.1f), 120.0f));
-    // Density option labels: 0=Sparse, 1=Low, 2=Mid, 3=High (label rename from UI step).
-    params.push_back(std::make_unique<juce::AudioParameterInt>(density, "Density", 0, 3, 1));
+    // Density option labels: 0=Sparse, 1=Low, 2=Mid, 3=High.
+    // Default 3 = High = 4 active diffusion stages (matches the DSP default behaviour).
+    params.push_back(std::make_unique<juce::AudioParameterInt>(density, "Density", 0, 3, 3));
 
     return { params.begin(), params.end() };
 }

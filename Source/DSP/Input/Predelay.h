@@ -1,6 +1,6 @@
 #pragma once
 #include <juce_audio_basics/juce_audio_basics.h>
-#include "DelayLine.h"
+#include "DiffusionNetwork/DelayLine.h"
 
 // Stereo pre-delay module. Up to 500 ms.
 class Predelay {
@@ -17,3 +17,4 @@ private:
 
     DelayLine delayL, delayR;
 };
+
